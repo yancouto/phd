@@ -1,4 +1,6 @@
-pub trait AggregatedData: Sized + Clone {
+use std::ops::RangeBounds;
+
+pub trait AggregatedData: Sized + Clone + Default {
     type Data: Sized + Clone;
     /// Create aggregated data from a single data item
     fn from(data: &Self::Data) -> Self;
@@ -13,28 +15,49 @@ pub enum SearchDirection {
     Right,
 }
 
-pub trait ImplicitBST<Aggregated>
+pub trait NodeReference<BST, Ag>
 where
-    Aggregated: AggregatedData,
-    Self: Sized,
+    BST: ImplicitBST<Ag>,
+    Ag: AggregatedData,
+    Self: Clone,
 {
-    type Reference;
+    /// BST currently owning the reference.
+    fn bst(&self) -> &BST;
+    /// Position of a reference in the BST, 0-indexed. Panic if reference is not valid.
+    fn order(&self) -> usize;
+    /// Data associated with the node in the bst.
+    fn data(&self) -> &Ag::Data;
+}
+
+pub trait WeakRef: Clone {
+    type StrongRef;
+    /// Upgrade to strong reference
+    fn upgrade(&self) -> Option<Self::StrongRef>;
+}
+
+pub trait ImplicitBST<Ag>
+where
+    Ag: AggregatedData,
+    Self: Sized + Clone + Eq,
+{
+    type WeakRef: WeakRef<StrongRef = Self::StrongRef>;
+    type StrongRef: NodeReference<Self, Ag>;
     fn new_empty() -> Self;
     /// List from a single element, plus the reference to that element, which can be used after concating with other lists.
-    fn new(data: Aggregated::Data) -> (Self, Self::Reference);
+    fn new(data: Ag::Data) -> (Self, Self::WeakRef);
     /// Concat with other list, assume all elements are larger.
-    fn concat(self, other: Self) -> Self;
-    /// Split first k elements from the rest
-    fn split(self, k: usize) -> (Self, Self);
-    // TODO: This probably needs to be different, I need to think about lifetimes, or use Rcs everywhere.
-    fn find_bst(index: &Self::Reference) -> &Self;
-    /// Position of a reference in the list. Panic if reference is not valid.
-    fn order_from_reference(&self, index: &Self::Reference) -> usize;
+    fn concat(&self, other: &Self) -> Self;
+    /// Split first range from left and right parts. Returns (left, range, right)
+    fn split(&self, range: impl RangeBounds<usize>) -> (Self, Self, Self);
+    fn total_agg(&self) -> Ag;
+    fn range_agg(&self, range: impl RangeBounds<usize>) -> Ag;
+    fn find_kth(&self, k: usize) -> Option<Self::WeakRef>;
     /// Find an element by giving a search strategy.
-    fn find(
+    fn find_element(
         &self,
-        search_strategy: impl FnMut(usize, &Aggregated::Data, &Aggregated) -> SearchDirection,
-    ) -> Self::Reference;
-    /// Change the element at a given index. Panics if index is out of bounds.
-    fn modify(&mut self, index: &Self::Reference, mod_func: impl FnOnce(&mut Aggregated::Data));
+        search_strategy: impl FnMut(usize, &Ag::Data, &Ag) -> SearchDirection,
+    ) -> Self::WeakRef;
+    /// Change the element at a given index.
+    fn modify(&self, index: &Self::WeakRef, mod_func: impl FnOnce(&mut Ag::Data)) -> Option<Self>;
+    fn contains(&self, index: &Self::WeakRef) -> bool;
 }
