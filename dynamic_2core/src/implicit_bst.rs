@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::RangeBounds;
 
 pub trait AggregatedData: Sized + Clone + Default {
@@ -38,7 +39,7 @@ pub trait WeakRef: Clone {
 pub trait ImplicitBST<Ag>
 where
     Ag: AggregatedData,
-    Self: Sized + Clone + Eq,
+    Self: Sized + Clone + Eq + Debug,
 {
     type WeakRef: WeakRef<StrongRef = Self::StrongRef>;
     type StrongRef: NodeReference<Self, Ag>;

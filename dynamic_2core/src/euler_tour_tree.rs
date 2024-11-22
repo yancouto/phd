@@ -67,7 +67,7 @@ impl<N> AsRef<N> for NodeRef<N> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EulerTourTree<BST, Ag>(BST, PhantomData<Ag>)
 where
     BST: ImplicitBST<ETAggregated<BST, Ag>>,
@@ -126,13 +126,24 @@ where
         &self.0
     }
     pub fn is_connected(node1: &NodeRef<BST::WeakRef>, node2: &NodeRef<BST::WeakRef>) -> bool {
-        BST::find_root(node1.as_ref()).is_some_and(|r| Some(r) == BST::find_root(node2.as_ref()))
+        node1
+            .0
+            .upgrade()
+            .is_some_and(|r| Some(r.bst()) == node2.0.upgrade().as_ref().map(|n| n.bst()))
     }
     fn disconnect_raw(edge: &BST::WeakRef) -> Option<(BST, BST)> {
-        todo!()
+        let out_node = edge.upgrade()?;
+        let in_node = if let ETData::EdgeOut { in_ref, .. } = out_node.data() {
+            or_alg_panic(in_ref.upgrade())
+        } else {
+            alg_panic()
+        };
+        let (left, middle, right) = out_node.bst().split(in_node.order()..=out_node.order());
+        Some((left.concat(&right), middle))
     }
+    /// Remove the edge and return the current tree and then the new tree the edge removal created.
     pub fn disconnect(edge: &EdgeRef<BST::WeakRef>) -> Option<(Self, Self)> {
-        let (a, b) = Self::disconnect_raw(edge)?;
+        let (a, b) = Self::disconnect_raw(&edge.0)?;
         Some((Self::from_bst(a), Self::from_bst(b)))
     }
 
