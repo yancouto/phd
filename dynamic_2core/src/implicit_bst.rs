@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 use std::ops::RangeBounds;
 
-pub trait AggregatedData: Sized + Clone + Default {
-    type Data: Sized + Clone;
+pub trait AggregatedData: Debug + Sized + Clone + Default {
+    type Data: Debug + Sized + Clone;
     /// Create aggregated data from a single data item
     fn from(data: &Self::Data) -> Self;
     /// Merge two aggregated data items. The other item contains data of some (not necessarily all) items to the right.
@@ -20,7 +20,7 @@ pub trait NodeReference<BST, Ag>
 where
     BST: ImplicitBST<Ag>,
     Ag: AggregatedData,
-    Self: Clone,
+    Self: Debug + Clone,
 {
     /// BST currently owning the reference.
     fn bst(&self) -> &BST;
@@ -30,7 +30,8 @@ where
     fn data(&self) -> &Ag::Data;
 }
 
-pub trait WeakRef: Clone {
+/// Survives concating and splitting operations.
+pub trait WeakRef: Debug + Clone {
     type StrongRef;
     /// Upgrade to strong reference
     fn upgrade(&self) -> Option<Self::StrongRef>;
@@ -39,7 +40,7 @@ pub trait WeakRef: Clone {
 pub trait ImplicitBST<Ag>
 where
     Ag: AggregatedData,
-    Self: Sized + Clone + Eq + Debug,
+    Self: Sized + Clone + Debug + FromIterator<Ag::Data>,
 {
     type WeakRef: WeakRef<StrongRef = Self::StrongRef>;
     type StrongRef: NodeReference<Self, Ag>;
@@ -58,7 +59,8 @@ where
         &self,
         search_strategy: impl FnMut(usize, &Ag::Data, &Ag) -> SearchDirection,
     ) -> Self::WeakRef;
-    /// Change the element at a given index.
-    fn modify(&self, index: &Self::WeakRef, mod_func: impl FnOnce(&mut Ag::Data)) -> Option<Self>;
     fn contains(&self, index: &Self::WeakRef) -> bool;
+    /// O(1), not content equality.
+    fn same_as(&self, other: &Self) -> bool;
+    fn len(&self) -> usize;
 }

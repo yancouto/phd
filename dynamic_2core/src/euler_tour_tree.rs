@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::implicit_bst::{AggregatedData, ImplicitBST, NodeReference, WeakRef};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ETData<Data, InRef> {
     Node(Data),
     EdgeOut {
@@ -23,7 +23,7 @@ impl<Data, InRef> ETData<Data, InRef> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ETAggregated<BST: ImplicitBST<Self>, Ag: AggregatedData> {
     data: Ag,
     subtree_size: usize,
@@ -129,7 +129,8 @@ where
         node1
             .0
             .upgrade()
-            .is_some_and(|r| Some(r.bst()) == node2.0.upgrade().as_ref().map(|n| n.bst()))
+            .zip(node2.0.upgrade())
+            .is_some_and(|(n1, n2)| n1.bst().same_as(n2.bst()))
     }
     fn disconnect_raw(edge: &BST::WeakRef) -> Option<(BST, BST)> {
         let out_node = edge.upgrade()?;
