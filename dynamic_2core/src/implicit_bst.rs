@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::ops::RangeBounds;
+use std::rc::Rc;
 
 pub trait AggregatedData: Debug + Sized + Clone + Default {
     type Data: Debug + Sized + Clone;
@@ -16,51 +17,63 @@ pub enum SearchDirection {
     Right,
 }
 
-pub trait NodeReference<BST, Ag>
-where
-    BST: ImplicitBST<Ag>,
-    Ag: AggregatedData,
-    Self: Debug + Clone,
-{
-    /// BST currently owning the reference.
-    fn bst(&self) -> &BST;
-    /// Position of a reference in the BST, 0-indexed. Panic if reference is not valid.
-    fn order(&self) -> usize;
-    /// Data associated with the node in the bst.
-    fn data(&self) -> &Ag::Data;
-}
-
-/// Survives concating and splitting operations.
-pub trait WeakRef: Debug + Clone {
-    type StrongRef;
-    /// Upgrade to strong reference
-    fn upgrade(&self) -> Option<Self::StrongRef>;
-}
-
+/// A node of a BST with implicit keys, and values that can be aggregated.
 pub trait ImplicitBST<Ag>
 where
     Ag: AggregatedData,
-    Self: Sized + Clone + Debug + FromIterator<Ag::Data>,
+    Self: Clone + Debug,
 {
-    type WeakRef: WeakRef<StrongRef = Self::StrongRef>;
-    type StrongRef: NodeReference<Self, Ag>;
-    fn new_empty() -> Self;
-    /// List from a single element, plus the reference to that element, which can be used after concating with other lists.
-    fn new(data: Ag::Data) -> (Self, Self::WeakRef);
-    /// Concat with other list, assume all elements are larger.
-    fn concat(&self, other: &Self) -> Self;
-    /// Split first range from left and right parts. Returns (left, range, right)
-    fn split(&self, range: impl RangeBounds<usize>) -> (Self, Self, Self);
-    fn total_agg(&self) -> Ag;
+    /// Empty BST
+    fn new_empty() -> Rc<Self>;
+    /// BST from a single element.
+    fn new(data: Ag::Data) -> Rc<Self>;
+    /// BST from list of items
+    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> Rc<Self>;
+
+    // NODE OPERATIONS - The following don't require the node to be a root.
+
+    /// Returns the root of the tree containing this node.
+    fn root(&self) -> Rc<Self>;
+    /// Data associated with this node only.
+    fn node_data(&self) -> &Ag::Data;
+    /// Position of the node in the full BST, 0-indexed. Panics if empty.
+    fn order(&self) -> usize;
+    /// Aggregated data of the subtree.
+    fn total_agg(&self) -> Ag {
+        self.range_agg(..)
+    }
+    /// Aggregated data of a range in the subtree. (0-indexed on the subtree)
     fn range_agg(&self, range: impl RangeBounds<usize>) -> Ag;
-    fn find_kth(&self, k: usize) -> Option<Self::WeakRef>;
     /// Find an element by giving a search strategy.
     fn find_element(
         &self,
         search_strategy: impl FnMut(usize, &Ag::Data, &Ag) -> SearchDirection,
-    ) -> Self::WeakRef;
-    fn contains(&self, index: &Self::WeakRef) -> bool;
-    /// O(1), not content equality.
-    fn same_as(&self, other: &Self) -> bool;
+    ) -> Rc<Self>;
+    /// K-th element in the subtree. (0-indexed on the subtree)
+    fn find_kth(&self, k: usize) -> Rc<Self>;
+    /// Size of the subtree.
     fn len(&self) -> usize;
+    /// Is the node empty?
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Same node, not content equality.
+    fn same_node(self: &Rc<Self>, other: &Rc<Self>) -> bool {
+        Rc::ptr_eq(self, other)
+    }
+    /// Are the two nodes on the same tree?
+    fn on_same_tree(&self, other: &Self) -> bool {
+        self.root().same_node(&other.root())
+    }
+    /// Checks if the current node is the root of the tree.
+    fn is_root(self: &Rc<Self>) -> bool {
+        self.root().same_node(self)
+    }
+
+    // Whole tree operations - These are applied to the root of the tree, not the current node.
+
+    /// Concat the BST containing this node with the one containing the other, assume all elements on it come after. Returns the new root.
+    fn concat(&self, other: &Self) -> Rc<Self>;
+    /// Splits the given range from the left and right parts. Index is on the WHOLE TREE, not on the subtree. Returns (left, range, right)
+    fn split(&self, range: impl RangeBounds<usize>) -> (Rc<Self>, Rc<Self>, Rc<Self>);
 }
