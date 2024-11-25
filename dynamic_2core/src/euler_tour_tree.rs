@@ -97,6 +97,13 @@ where
         let bst = BST::new(ETData::Node(node_data));
         NodeRef(Self::from_bst(bst))
     }
+    pub fn from_iter(
+        data: impl IntoIterator<Item = Ag::Data>,
+    ) -> impl Iterator<Item = NodeRef<Self>> {
+        BST::from_iter(data.into_iter().map(ETData::Node))
+            .map(Self::from_bst)
+            .map(NodeRef)
+    }
     /// Makes the given node the root.
     pub fn reroot(node: &NodeRef<Self>) {
         Self::reroot_raw(&node.0 .0)

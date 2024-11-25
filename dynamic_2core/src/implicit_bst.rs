@@ -28,7 +28,7 @@ where
     /// BST from a single element.
     fn new(data: Ag::Data) -> Rc<Self>;
     /// BST from list of items
-    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> Rc<Self>;
+    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> impl Iterator<Item = Rc<Self>>;
 
     // NODE OPERATIONS - The following don't require the node to be a root.
 

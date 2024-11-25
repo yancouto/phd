@@ -75,7 +75,7 @@ where
         node
     }
 
-    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> Rc<Self> {
+    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> impl Iterator<Item = Rc<Self>> {
         let cur = Self::map_len();
         let entries = data
             .into_iter()
@@ -87,12 +87,11 @@ where
             .collect::<Vec<_>>();
         let added = entries.len();
         let g = Arc::new(RwLock::new(Group(entries)));
-        let first = SlowBst::from(cur);
         Ag::map()
             .write()
             .unwrap()
             .extend(std::iter::repeat(g).take(added));
-        first
+        (cur..cur + added).map(SlowBst::from)
     }
 
     fn root(&self) -> Rc<Self> {

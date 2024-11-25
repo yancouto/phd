@@ -1,4 +1,5 @@
 use std::{
+    rc::Rc,
     sync::{Arc, RwLock},
     vec,
 };
@@ -42,6 +43,10 @@ struct BSTTests<T: ImplicitBST<AggSum>> {
 }
 
 impl<T: ImplicitBST<AggSum>> BSTTests<T> {
+    fn build(v: &[i32]) -> Rc<T> {
+        T::from_iter(v.iter().copied()).next().unwrap()
+    }
+
     fn test_new_empty() {
         let bst = T::new_empty();
         assert_eq!(bst.total_agg().0, 0);
@@ -54,8 +59,8 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
     }
 
     fn test_concat() {
-        let bst1 = T::from_iter(vec![1, 2, 3]);
-        let bst2 = T::from_iter(vec![8, 12, 10]);
+        let bst1 = Self::build(&[1, 2, 3]);
+        let bst2 = Self::build(&[8, 12, 10]);
         let bst = bst1.concat(&bst2);
         assert_eq!(bst.total_agg(), 36);
         assert_eq!(bst.find_kth(3).node_data(), &8);
@@ -65,7 +70,7 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
     }
 
     fn test_split() {
-        let bst = T::from_iter(vec![1, 2, 3, 7, 9, 2]);
+        let bst = Self::build(&[1, 2, 3, 7, 9, 2]);
         assert_eq!(bst.range_agg(0..1), 1);
         assert_eq!(bst.range_agg(1..4), 12);
         assert_eq!(bst.range_agg(4..), 11);
@@ -100,13 +105,13 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
     }
 
     fn test_same_as_not_content() {
-        let bst1 = T::from_iter(vec![1, 2, 3]);
-        let bst2 = T::from_iter(vec![1, 2, 3]);
+        let bst1 = Self::build(&[1, 2, 3]);
+        let bst2 = Self::build(&[1, 2, 3]);
         assert!(Self::same_content(&bst1, &bst2));
         assert!(!bst1.same_node(&bst2));
         assert!(bst1.same_node(&bst1));
         assert!(bst2.same_node(&bst2));
-        let bst3 = T::from_iter(vec![1, 2, 3, 4]);
+        let bst3 = Self::build(&[1, 2, 3, 4]);
         let (_, bst4, _) = bst3.split(0..3);
         assert!(Self::same_content(&bst1, &bst4));
         assert!(!bst1.same_node(&bst4));
@@ -131,7 +136,7 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
         assert!(n[0].on_same_tree(&n[2]));
         assert!(Self::same_content(
             &n[2].root(),
-            &T::from_iter(vec![1, 2, 3, 4])
+            &Self::build(&[1, 2, 3, 4])
         ));
         n[0].split(0..=1);
         assert!(!n[0].on_same_tree(&n[2]));
@@ -139,7 +144,7 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
         assert!(n[1].on_same_tree(&n[3]));
         assert!(Self::same_content(
             &n[2].root(),
-            &T::from_iter(vec![3, 4, 1, 2])
+            &Self::build(&[3, 4, 1, 2])
         ));
     }
 
