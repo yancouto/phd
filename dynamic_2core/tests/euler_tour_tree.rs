@@ -26,7 +26,7 @@ where
 
     // -1 for going up tree
     fn assert_node_order(root: &Node<T>, order: &[i32]) {
-        let root = ETT::inner_bst(root).root();
+        let root = root.inner_bst().root();
         use dynamic_2core::euler_tour_tree::ETData::*;
         let mut all = (0..root.len()).filter_map(|i| match root.find_kth(i).node_data() {
             Node(x) => Some(*x),
@@ -41,14 +41,22 @@ where
 
     fn assert_subtree_sizes(nodes: &Vec<Node<T>>, sizes: &[usize]) {
         for (i, size) in sizes.iter().enumerate() {
-            assert_eq!(ETT::subtree_size(&nodes[i]), *size);
+            assert_eq!(nodes[i].subtree_size(), *size);
         }
     }
 
     fn assert_all_connections(nodes: &Vec<Node<T>>, is_conn: &[&str]) {
         for (i, conn) in is_conn.iter().enumerate() {
             for (j, c) in conn.chars().enumerate() {
-                assert_eq!(ETT::is_connected(&nodes[i], &nodes[j]), c == '1');
+                assert_eq!(nodes[i].is_connected(&nodes[j]), c == '1');
+            }
+        }
+    }
+
+    fn assert_all_descendants(nodes: &Vec<Node<T>>, descendants: &[&str]) {
+        for (i, conn) in descendants.iter().enumerate() {
+            for (j, c) in conn.chars().enumerate() {
+                assert_eq!(nodes[j].is_descendant_of(&nodes[i]), c == '1');
             }
         }
     }
@@ -58,32 +66,26 @@ where
         let mut edges = vec![];
         for i in 0..4 {
             dbg!(i);
-            assert!(!ETT::is_connected(&nodes[i], &nodes[i + 1]),);
-            edges.push(ETT::connect(&nodes[i], &nodes[i + 1], i as i32).unwrap());
-            assert!(ETT::is_connected(&nodes[i], &nodes[i + 1]));
+            assert!(!nodes[i].is_connected(&nodes[i + 1]),);
+            edges.push(nodes[i].connect(&nodes[i + 1], i as i32).unwrap());
+            assert!(nodes[i].is_connected(&nodes[i + 1]));
             dbg!(&nodes[i]);
         }
         Self::assert_node_order(&nodes[0], &[0, 1, 2, 3, 4, -1, -1, -1, -1]);
         Self::assert_subtree_sizes(&nodes, &[5, 4, 3, 2, 1]);
-        assert!(ETT::is_connected(&nodes[0], &nodes[4]));
-        assert!(ETT::is_parent_of(&nodes[0], &nodes[4]));
-        assert!(!ETT::is_parent_of(&nodes[4], &nodes[0]));
-        assert!(ETT::connect(&nodes[0], &nodes[2], 0).is_none());
+        assert!(nodes[0].connect(&nodes[2], 0).is_none());
+        Self::assert_all_descendants(&nodes, &["11111", "01111", "00111", "00011", "00001"]);
         Self::assert_all_connections(&nodes, &["11111", "11111", "11111", "11111", "11111"]);
-        ETT::disconnect(&edges[1]); // 1-2
-        assert!(!ETT::is_connected(&nodes[0], &nodes[4]));
-        assert!(!ETT::is_parent_of(&nodes[0], &nodes[4]));
-        assert!(ETT::is_connected(&nodes[2], &nodes[4]));
-        assert!(ETT::is_parent_of(&nodes[2], &nodes[3]));
+        edges[1].disconnect(); // 1-2
         Self::assert_node_order(&nodes[0], &[0, 1, -1]);
         Self::assert_node_order(&nodes[2], &[2, 3, 4, -1, -1]);
         Self::assert_subtree_sizes(&nodes, &[2, 1, 3, 2, 1]);
+        Self::assert_all_descendants(&nodes, &["11000", "01000", "00111", "00011", "00001"]);
         Self::assert_all_connections(&nodes, &["11000", "11000", "00111", "00111", "00111"]);
-        ETT::reroot(&nodes[3]);
-        assert!(!ETT::is_parent_of(&nodes[2], &nodes[3]));
-        assert!(ETT::is_parent_of(&nodes[3], &nodes[2]));
+        nodes[3].reroot();
         Self::assert_node_order(&nodes[2], &[3, 2, -1, 4, -1]);
         Self::assert_subtree_sizes(&nodes, &[2, 1, 1, 3, 1]);
+        Self::assert_all_descendants(&nodes, &["11000", "01000", "00100", "00111", "00001"]);
         Self::assert_all_connections(&nodes, &["11000", "11000", "00111", "00111", "00111"]);
     }
 

@@ -101,6 +101,87 @@ where
         write!(f, "\n")
     }
 }
+impl<BST, Ag> NodeRef<EulerTourTree<BST, Ag>>
+where
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    Ag: AggregatedData,
+{
+    fn from_bst(bst: Rc<BST>) -> Self {
+        Self(EulerTourTree::from_bst(bst))
+    }
+    /// Makes the given node the root.
+    pub fn reroot(&self) {
+        EulerTourTree::reroot_raw(&self.0 .0)
+    }
+    /// BST used to store the euler tour.
+    pub fn inner_bst(&self) -> Rc<BST> {
+        self.0 .0.clone()
+    }
+    pub fn is_connected(&self, node2: &Self) -> bool {
+        self.0 .0.on_same_tree(&node2.0 .0)
+    }
+
+    /// Connects the two nodes with an edge. The root of the first tree remais the root. Returns None if they are already connected.
+    pub fn connect(
+        &self,
+        node2: &Self,
+        edge_data: Ag::Data,
+    ) -> Option<EdgeRef<EulerTourTree<BST, Ag>>> {
+        if self.0 .0.on_same_tree(&node2.0 .0) {
+            // Already connected
+            None
+        } else {
+            Self::reroot(node2);
+            Some(EulerTourTree::link_root(self, node2, edge_data))
+        }
+    }
+
+    pub fn subtree_size(&self) -> usize {
+        let root = self.0 .0.root();
+        match self.0 .0.order().checked_sub(1) {
+            Some(k) => {
+                if let ETData::EdgeOut { in_ref, .. } = root.find_kth(k).node_data() {
+                    let in_ref = or_alg_panic(in_ref.upgrade());
+                    (in_ref.order() - k - 1 + 2) / 3
+                } else {
+                    alg_panic()
+                }
+            }
+            // It is the root
+            None => (root.len() + 2) / 3,
+        }
+    }
+
+    pub fn is_descendant_of(&self, ascendant: &Self) -> bool {
+        if !self.0 .0.on_same_tree(&ascendant.0 .0) {
+            return false;
+        }
+        let asc_subtree = ascendant.subtree_size();
+        let asc_order = ascendant.0 .0.order();
+        let desc_order = self.0 .0.order();
+        desc_order >= asc_order && desc_order < asc_order + 3 * asc_subtree - 2
+    }
+}
+
+impl<BST, Ag> EdgeRef<EulerTourTree<BST, Ag>>
+where
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    Ag: AggregatedData,
+{
+    fn from_bst(out: Rc<BST>, inp: Rc<BST>) -> Self {
+        Self(EulerTourTree::from_bst(out), EulerTourTree::from_bst(inp))
+    }
+    /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
+    pub fn disconnect(
+        &self,
+    ) -> (
+        NodeRef<EulerTourTree<BST, Ag>>,
+        NodeRef<EulerTourTree<BST, Ag>>,
+    ) {
+        let (a, b, _) = EulerTourTree::disconnect_raw(&self.0 .0, Some(&self.1 .0));
+        (NodeRef::from_bst(a), NodeRef::from_bst(b))
+    }
+}
 
 impl<BST, Ag> EulerTourTree<BST, Ag>
 where
@@ -113,11 +194,7 @@ where
     /// Creates a new EulerTourTree with a single node.
     pub fn new(node_data: Ag::Data) -> NodeRef<Self> {
         let bst = BST::new(ETData::Node(node_data));
-        NodeRef(Self::from_bst(bst))
-    }
-    /// Makes the given node the root.
-    pub fn reroot(node: &NodeRef<Self>) {
-        Self::reroot_raw(&node.0 .0)
+        NodeRef::from_bst(bst)
     }
     fn reroot_raw(node: &Rc<BST>) {
         let k = match node.order().checked_sub(1) {
@@ -144,7 +221,7 @@ where
             in_ref: Rc::downgrade(&inp),
         }); // uw
         Self::link_root_raw(&node1.0 .0, &root2.0 .0, &out, &inp);
-        EdgeRef(Self::from_bst(out), Self::from_bst(inp))
+        EdgeRef::from_bst(out, inp)
     }
     fn link_root_raw(
         node1: &Rc<BST>, // u
@@ -160,13 +237,6 @@ where
             .concat(node2)
             .concat(in_edge)
             .concat(&after_node1);
-    }
-    /// BST used to store the euler tour.
-    pub fn inner_bst(node: &NodeRef<Self>) -> Rc<BST> {
-        node.0 .0.clone()
-    }
-    pub fn is_connected(node1: &NodeRef<Self>, node2: &NodeRef<Self>) -> bool {
-        node1.0 .0.on_same_tree(&node2.0 .0)
     }
     /// Returns the first elements of each tree, which are the roots. And then the removed in_edge.
     fn disconnect_raw(
@@ -186,54 +256,5 @@ where
         assert_eq!(out_edge.root().len(), 1);
         assert_eq!(in_edge.root().len(), 1);
         (left.concat(&right).first(), middle.first(), in_edge.clone())
-    }
-    /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
-    pub fn disconnect(edge: &EdgeRef<Self>) -> (NodeRef<Self>, NodeRef<Self>) {
-        let (a, b, _) = Self::disconnect_raw(&edge.0 .0, Some(&edge.1 .0));
-        (NodeRef(Self::from_bst(a)), NodeRef(Self::from_bst(b)))
-    }
-
-    /// Connects the two nodes with an edge. The root of the first tree remais the root. Returns None if they are already connected.
-    pub fn connect(
-        node1: &NodeRef<Self>,
-        node2: &NodeRef<Self>,
-        edge_data: Ag::Data,
-    ) -> Option<EdgeRef<Self>> {
-        if node1.0 .0.on_same_tree(&node2.0 .0) {
-            // Already connected
-            None
-        } else {
-            Self::reroot(node2);
-            Some(Self::link_root(node1, node2, edge_data))
-        }
-    }
-
-    pub fn subtree_size(node: &NodeRef<Self>) -> usize {
-        let root = node.0 .0.root();
-        match node.0 .0.order().checked_sub(1) {
-            Some(k) => {
-                if let ETData::EdgeOut { in_ref, .. } = root.find_kth(k).node_data() {
-                    let in_ref = or_alg_panic(in_ref.upgrade());
-                    (in_ref.order() - k - 1 + 2) / 3
-                } else {
-                    alg_panic()
-                }
-            }
-            // It is the root
-            None => (root.len() + 2) / 3,
-        }
-    }
-
-    pub fn is_parent_of(parent: &NodeRef<Self>, child: &NodeRef<Self>) -> bool {
-        if !parent.0 .0.on_same_tree(&child.0 .0) {
-            return false;
-        }
-        let parent_size = parent.0 .0.total_agg().subtree_size;
-        if parent_size <= 1 {
-            return false;
-        }
-        let parent_order = parent.0 .0.order();
-        let child_order = child.0 .0.order();
-        child_order > parent_order && child_order < parent_order + 3 * parent_size
     }
 }
