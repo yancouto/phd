@@ -1,6 +1,7 @@
 use std::{
+    fmt::Debug,
     marker::PhantomData,
-    rc::{Rc, Weak},
+    sync::{Arc as Rc, Weak},
 };
 
 use crate::implicit_bst::{AggregatedData, ImplicitBST};
@@ -27,13 +28,13 @@ impl<Data, InRef> ETData<Data, InRef> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ETAggregated<BST: ImplicitBST<Self>, Ag: AggregatedData> {
+pub struct ETAggregated<Ag: AggregatedData, InRef> {
     data: Ag,
     subtree_size: usize,
-    _phantom: PhantomData<BST>,
+    _phantom: PhantomData<InRef>,
 }
 
-impl<BST: ImplicitBST<Self>, Ag: AggregatedData> Default for ETAggregated<BST, Ag> {
+impl<Ag: AggregatedData, InRef> Default for ETAggregated<Ag, InRef> {
     fn default() -> Self {
         Self {
             data: Ag::default(),
@@ -43,8 +44,8 @@ impl<BST: ImplicitBST<Self>, Ag: AggregatedData> Default for ETAggregated<BST, A
     }
 }
 
-impl<BST: ImplicitBST<Self>, Ag: AggregatedData> AggregatedData for ETAggregated<BST, Ag> {
-    type Data = ETData<Ag::Data, Weak<BST>>;
+impl<Ag: AggregatedData, InRef: Clone + Debug> AggregatedData for ETAggregated<Ag, InRef> {
+    type Data = ETData<Ag::Data, InRef>;
     fn from(data: &Self::Data) -> Self {
         Self {
             data: data.data().map(Ag::from).unwrap_or_default(),
@@ -61,7 +62,9 @@ impl<BST: ImplicitBST<Self>, Ag: AggregatedData> AggregatedData for ETAggregated
     }
 }
 
+#[derive(Debug)]
 pub struct NodeRef<N>(N);
+#[derive(Debug)]
 pub struct EdgeRef<N>(N, N);
 
 impl<N> AsRef<N> for NodeRef<N> {
@@ -70,10 +73,10 @@ impl<N> AsRef<N> for NodeRef<N> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EulerTourTree<BST, Ag>(Rc<BST>, PhantomData<Ag>)
 where
-    BST: ImplicitBST<ETAggregated<BST, Ag>>,
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData;
 
 fn alg_panic() -> ! {
@@ -84,9 +87,23 @@ fn or_alg_panic<T>(opt: Option<T>) -> T {
     opt.expect("EulerTourTree algorithm incorrect")
 }
 
+impl<BST, Ag> std::fmt::Debug for EulerTourTree<BST, Ag>
+where
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    Ag: AggregatedData,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let r = self.0.root();
+        for i in 0..r.len() {
+            write!(f, "{:?} ", r.find_kth(i).node_data())?;
+        }
+        write!(f, "\n")
+    }
+}
+
 impl<BST, Ag> EulerTourTree<BST, Ag>
 where
-    BST: ImplicitBST<ETAggregated<BST, Ag>>,
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     fn from_bst(bst: Rc<BST>) -> Self {
@@ -96,13 +113,6 @@ where
     pub fn new(node_data: Ag::Data) -> NodeRef<Self> {
         let bst = BST::new(ETData::Node(node_data));
         NodeRef(Self::from_bst(bst))
-    }
-    pub fn from_iter(
-        data: impl IntoIterator<Item = Ag::Data>,
-    ) -> impl Iterator<Item = NodeRef<Self>> {
-        BST::from_iter(data.into_iter().map(ETData::Node))
-            .map(Self::from_bst)
-            .map(NodeRef)
     }
     /// Makes the given node the root.
     pub fn reroot(node: &NodeRef<Self>) {
@@ -114,24 +124,24 @@ where
             // Already the root.
             None => return,
         };
-        let out_edge = node.find_kth(k);
+        let out_edge = node.root().find_kth(k);
         let (prev_root, new_root, in_edge) = Self::disconnect_raw(&out_edge, None);
         // reuse even the edges so it's easier to keep references to them
         Self::link_roots_raw(&new_root, &prev_root, &out_edge, &in_edge);
     }
-    /// Adds an edge between the root of self and the root of other.
-    pub fn link_roots(
-        node1: &NodeRef<Self>, // u
-        node2: &NodeRef<Self>, // w
+    /// Adds an edge between the root of self and the root of other. Panics if they are on the same tree.
+    fn link_roots(
+        root1: &NodeRef<Self>, // u
+        root2: &NodeRef<Self>, // w
         edge_data: Ag::Data,
     ) -> EdgeRef<Self> {
-        assert!(!node1.0 .0.on_same_tree(&node2.0 .0));
+        assert!(!root1.0 .0.on_same_tree(&root2.0 .0));
         let inp = BST::new(ETData::EdgeIn); // wu
         let out = BST::new(ETData::EdgeOut {
             data: edge_data,
             in_ref: Rc::downgrade(&inp),
         }); // uw
-        Self::link_roots_raw(&node1.0 .0, &node2.0 .0, &out, &inp);
+        Self::link_roots_raw(&root1.0 .0, &root2.0 .0, &out, &inp);
         EdgeRef(Self::from_bst(out), Self::from_bst(inp))
     }
     fn link_roots_raw(
@@ -146,8 +156,8 @@ where
     pub fn inner_bst(&self) -> &BST {
         &self.0
     }
-    pub fn is_connected(node1: &Self, node2: &Self) -> bool {
-        node1.0.on_same_tree(&node2.0)
+    pub fn is_connected(node1: &NodeRef<Self>, node2: &NodeRef<Self>) -> bool {
+        node1.0 .0.on_same_tree(&node2.0 .0)
     }
     /// Returns the first elements of each tree, which are the roots. And then the removed in_edge.
     fn disconnect_raw(
@@ -166,7 +176,13 @@ where
         let (_, middle, _) = middle.split(1..middle.len() - 1);
         assert_eq!(out_edge.root().len(), 1);
         assert_eq!(in_edge.root().len(), 1);
-        (left.concat(&right).first(), middle.first(), in_edge.clone())
+        dbg!(&left);
+        dbg!(&right);
+        (
+            dbg!(left.concat(&right)).first(),
+            dbg!(middle).first(),
+            in_edge.clone(),
+        )
     }
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
     pub fn disconnect(edge: &EdgeRef<Self>) -> (NodeRef<Self>, NodeRef<Self>) {

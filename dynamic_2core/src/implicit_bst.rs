@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::ops::RangeBounds;
-use std::rc::Rc;
+use std::sync::Arc as Rc;
 
 pub trait AggregatedData: Debug + Sized + Clone + Default {
     type Data: Debug + Sized + Clone;
@@ -21,7 +21,7 @@ pub enum SearchDirection {
 pub trait ImplicitBST<Ag>
 where
     Ag: AggregatedData,
-    Self: Clone + Debug,
+    Self: Debug,
 {
     /// Empty BST
     fn new_empty() -> Rc<Self>;

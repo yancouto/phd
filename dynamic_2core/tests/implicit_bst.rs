@@ -1,46 +1,12 @@
-use std::{
-    rc::Rc,
-    sync::{Arc, RwLock},
-    vec,
-};
+use std::sync::Arc as Rc;
 
-use dynamic_2core::{
-    implicit_bst::*,
-    slow_bst::{Group, SlowBst, SlowBstData},
-};
+use common::slow_bst::SlowBst;
+use common::AggSum;
+use dynamic_2core::implicit_bst::*;
 
-#[derive(Debug, Clone, Default)]
-struct AggSum(i32);
+mod common;
 
-impl AggregatedData for AggSum {
-    type Data = i32;
-
-    fn from(data: &Self::Data) -> Self {
-        Self(*data)
-    }
-
-    fn merge(self, right: Self) -> Self {
-        Self(self.0 + right.0)
-    }
-}
-
-static GROUPS: RwLock<Vec<Arc<RwLock<Group<AggSum>>>>> = RwLock::new(vec![]);
-
-impl SlowBstData for AggSum {
-    fn map() -> &'static RwLock<Vec<Arc<RwLock<Group<AggSum>>>>> {
-        &GROUPS
-    }
-}
-
-impl PartialEq<i32> for AggSum {
-    fn eq(&self, other: &i32) -> bool {
-        self.0 == *other
-    }
-}
-
-struct BSTTests<T: ImplicitBST<AggSum>> {
-    _marker: std::marker::PhantomData<T>,
-}
+struct BSTTests<T: ImplicitBST<AggSum>>(std::marker::PhantomData<T>);
 
 impl<T: ImplicitBST<AggSum>> BSTTests<T> {
     fn build(v: &[i32]) -> Rc<T> {
