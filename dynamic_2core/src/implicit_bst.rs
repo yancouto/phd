@@ -51,6 +51,9 @@ where
     ) -> Rc<Self>;
     /// K-th element in the subtree. (0-indexed on the subtree)
     fn find_kth(&self, k: usize) -> Rc<Self>;
+    fn first(&self) -> Rc<Self> {
+        self.find_kth(0)
+    }
     /// Size of the subtree.
     fn len(&self) -> usize;
     /// Is the node empty?
