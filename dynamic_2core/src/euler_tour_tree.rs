@@ -94,8 +94,9 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let r = self.0.root();
+        write!(f, "Euler tour:")?;
         for i in 0..r.len() {
-            write!(f, "{:?} ", r.find_kth(i).node_data())?;
+            write!(f, " {:?}", r.find_kth(i).node_data())?;
         }
         write!(f, "\n")
     }
@@ -127,34 +128,42 @@ where
         let out_edge = node.root().find_kth(k);
         let (prev_root, new_root, in_edge) = Self::disconnect_raw(&out_edge, None);
         // reuse even the edges so it's easier to keep references to them
-        Self::link_roots_raw(&new_root, &prev_root, &out_edge, &in_edge);
+        Self::link_root_raw(&new_root, &prev_root, &out_edge, &in_edge);
     }
     /// Adds an edge between the root of self and the root of other. Panics if they are on the same tree.
-    fn link_roots(
-        root1: &NodeRef<Self>, // u
+    fn link_root(
+        node1: &NodeRef<Self>, // u
         root2: &NodeRef<Self>, // w
         edge_data: Ag::Data,
     ) -> EdgeRef<Self> {
-        assert!(!root1.0 .0.on_same_tree(&root2.0 .0));
+        assert!(!node1.0 .0.on_same_tree(&root2.0 .0));
+        assert!(root2.0 .0.is_root());
         let inp = BST::new(ETData::EdgeIn); // wu
         let out = BST::new(ETData::EdgeOut {
             data: edge_data,
             in_ref: Rc::downgrade(&inp),
         }); // uw
-        Self::link_roots_raw(&root1.0 .0, &root2.0 .0, &out, &inp);
+        Self::link_root_raw(&node1.0 .0, &root2.0 .0, &out, &inp);
         EdgeRef(Self::from_bst(out), Self::from_bst(inp))
     }
-    fn link_roots_raw(
+    fn link_root_raw(
         node1: &Rc<BST>, // u
         node2: &Rc<BST>, // w
         out_edge: &Rc<BST>,
         in_edge: &Rc<BST>,
     ) {
-        node1.concat(out_edge).concat(node2).concat(in_edge);
+        // "AAA u BBB" and "w CCC" (it is root) becomes
+        // AAA u uw w CCC wu BBB
+        let (_, until_node1, after_node1) = node1.split(0..=node1.order());
+        until_node1
+            .concat(out_edge)
+            .concat(node2)
+            .concat(in_edge)
+            .concat(&after_node1);
     }
     /// BST used to store the euler tour.
-    pub fn inner_bst(&self) -> &BST {
-        &self.0
+    pub fn inner_bst(node: &NodeRef<Self>) -> Rc<BST> {
+        node.0 .0.clone()
     }
     pub fn is_connected(node1: &NodeRef<Self>, node2: &NodeRef<Self>) -> bool {
         node1.0 .0.on_same_tree(&node2.0 .0)
@@ -176,13 +185,7 @@ where
         let (_, middle, _) = middle.split(1..middle.len() - 1);
         assert_eq!(out_edge.root().len(), 1);
         assert_eq!(in_edge.root().len(), 1);
-        dbg!(&left);
-        dbg!(&right);
-        (
-            dbg!(left.concat(&right)).first(),
-            dbg!(middle).first(),
-            in_edge.clone(),
-        )
+        (left.concat(&right).first(), middle.first(), in_edge.clone())
     }
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
     pub fn disconnect(edge: &EdgeRef<Self>) -> (NodeRef<Self>, NodeRef<Self>) {
@@ -190,7 +193,7 @@ where
         (NodeRef(Self::from_bst(a)), NodeRef(Self::from_bst(b)))
     }
 
-    /// Connects the two nodes with an edge. Returns None if they are already connected.
+    /// Connects the two nodes with an edge. The root of the first tree remais the root. Returns None if they are already connected.
     pub fn connect(
         node1: &NodeRef<Self>,
         node2: &NodeRef<Self>,
@@ -200,9 +203,21 @@ where
             // Already connected
             None
         } else {
-            Self::reroot(node1);
             Self::reroot(node2);
-            Some(Self::link_roots(node1, node2, edge_data))
+            Some(Self::link_root(node1, node2, edge_data))
         }
+    }
+
+    pub fn is_parent_of(parent: &NodeRef<Self>, child: &NodeRef<Self>) -> bool {
+        if !parent.0 .0.on_same_tree(&child.0 .0) {
+            return false;
+        }
+        let parent_size = parent.0 .0.total_agg().subtree_size;
+        if parent_size <= 1 {
+            return false;
+        }
+        let parent_order = parent.0 .0.order();
+        let child_order = child.0 .0.order();
+        child_order > parent_order && child_order < parent_order + 3 * parent_size
     }
 }
