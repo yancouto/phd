@@ -39,6 +39,20 @@ where
         assert_eq!(all.next(), None);
     }
 
+    fn assert_subtree_sizes(nodes: &Vec<Node<T>>, sizes: &[usize]) {
+        for (i, size) in sizes.iter().enumerate() {
+            assert_eq!(ETT::subtree_size(&nodes[i]), *size);
+        }
+    }
+
+    fn assert_all_connections(nodes: &Vec<Node<T>>, is_conn: &[&str]) {
+        for (i, conn) in is_conn.iter().enumerate() {
+            for (j, c) in conn.chars().enumerate() {
+                assert_eq!(ETT::is_connected(&nodes[i], &nodes[j]), c == '1');
+            }
+        }
+    }
+
     fn test_simple() {
         let nodes = Self::build(5);
         let mut edges = vec![];
@@ -50,10 +64,12 @@ where
             dbg!(&nodes[i]);
         }
         Self::assert_node_order(&nodes[0], &[0, 1, 2, 3, 4, -1, -1, -1, -1]);
+        Self::assert_subtree_sizes(&nodes, &[5, 4, 3, 2, 1]);
         assert!(ETT::is_connected(&nodes[0], &nodes[4]));
         assert!(ETT::is_parent_of(&nodes[0], &nodes[4]));
         assert!(!ETT::is_parent_of(&nodes[4], &nodes[0]));
         assert!(ETT::connect(&nodes[0], &nodes[2], 0).is_none());
+        Self::assert_all_connections(&nodes, &["11111", "11111", "11111", "11111", "11111"]);
         ETT::disconnect(&edges[1]); // 1-2
         assert!(!ETT::is_connected(&nodes[0], &nodes[4]));
         assert!(!ETT::is_parent_of(&nodes[0], &nodes[4]));
@@ -61,10 +77,14 @@ where
         assert!(ETT::is_parent_of(&nodes[2], &nodes[3]));
         Self::assert_node_order(&nodes[0], &[0, 1, -1]);
         Self::assert_node_order(&nodes[2], &[2, 3, 4, -1, -1]);
+        Self::assert_subtree_sizes(&nodes, &[2, 1, 3, 2, 1]);
+        Self::assert_all_connections(&nodes, &["11000", "11000", "00111", "00111", "00111"]);
         ETT::reroot(&nodes[3]);
         assert!(!ETT::is_parent_of(&nodes[2], &nodes[3]));
         assert!(ETT::is_parent_of(&nodes[3], &nodes[2]));
         Self::assert_node_order(&nodes[2], &[3, 2, -1, 4, -1]);
+        Self::assert_subtree_sizes(&nodes, &[2, 1, 1, 3, 1]);
+        Self::assert_all_connections(&nodes, &["11000", "11000", "00111", "00111", "00111"]);
     }
 
     fn test_all() {

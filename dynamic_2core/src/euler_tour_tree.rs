@@ -208,6 +208,22 @@ where
         }
     }
 
+    pub fn subtree_size(node: &NodeRef<Self>) -> usize {
+        let root = node.0 .0.root();
+        match node.0 .0.order().checked_sub(1) {
+            Some(k) => {
+                if let ETData::EdgeOut { in_ref, .. } = root.find_kth(k).node_data() {
+                    let in_ref = or_alg_panic(in_ref.upgrade());
+                    (in_ref.order() - k - 1 + 2) / 3
+                } else {
+                    alg_panic()
+                }
+            }
+            // It is the root
+            None => (root.len() + 2) / 3,
+        }
+    }
+
     pub fn is_parent_of(parent: &NodeRef<Self>, child: &NodeRef<Self>) -> bool {
         if !parent.0 .0.on_same_tree(&child.0 .0) {
             return false;
