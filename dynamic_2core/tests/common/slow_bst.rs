@@ -1,7 +1,7 @@
 use std::{
     marker::PhantomData,
     ops::RangeBounds,
-    sync::{Arc, Arc as Rc, RwLock, Weak},
+    sync::{Arc, RwLock, Weak},
     usize,
 };
 
@@ -32,8 +32,8 @@ pub trait SlowBstData: AggregatedData + 'static {
 impl<Ag: SlowBstData> SlowBst<Ag> {
     // node id to group id
 
-    fn from(idx: usize) -> Rc<Self> {
-        Rc::new(SlowBst {
+    fn from(idx: usize) -> Arc<Self> {
+        Arc::new(SlowBst {
             node_idx: idx,
             _phantom: PhantomData,
         })
@@ -56,11 +56,11 @@ impl<Ag: SlowBstData> SlowBst<Ag> {
 }
 
 impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
-    fn new_empty() -> Rc<Self> {
+    fn new_empty() -> Arc<Self> {
         SlowBst::from(usize::MAX)
     }
 
-    fn new(data: Ag::Data) -> Rc<Self> {
+    fn new(data: Ag::Data) -> Arc<Self> {
         let node = SlowBst::from(Self::map_len());
         let g = Group(vec![GroupEntry {
             node_idx: node.node_idx,
@@ -70,7 +70,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         node
     }
 
-    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> impl Iterator<Item = Rc<Self>> {
+    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> impl Iterator<Item = Arc<Self>> {
         let cur = Self::map_len();
         let entries = data
             .into_iter()
@@ -89,7 +89,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         (cur..cur + added).map(SlowBst::from)
     }
 
-    fn root(&self) -> Rc<Self> {
+    fn root(&self) -> Arc<Self> {
         let root_idx = self.group_entry_idx(0);
         SlowBst::from(root_idx)
     }
@@ -126,7 +126,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
             .fold(Ag::default(), Ag::merge)
     }
 
-    fn find_kth(&self, k: usize) -> Rc<Self> {
+    fn find_kth(&self, k: usize) -> Arc<Self> {
         let cur_k = self.order();
         let the_idx = self.group_entry_idx(cur_k + k);
         SlowBst::from(the_idx)
@@ -139,7 +139,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         self.group().read().unwrap().0.len()
     }
 
-    fn same_node(self: &Rc<Self>, other: &Rc<Self>) -> bool {
+    fn same_node(self: &Arc<Self>, other: &Arc<Self>) -> bool {
         self.node_idx == other.node_idx
     }
 
@@ -147,7 +147,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         self.node_idx == usize::MAX
     }
 
-    fn concat(&self, other: &Self) -> Rc<Self> {
+    fn concat(&self, other: &Self) -> Arc<Self> {
         if self.is_empty() {
             return Self::from(other.node_idx);
         } else if other.is_empty() {
@@ -166,7 +166,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         root
     }
 
-    fn split(&self, range: impl RangeBounds<usize>) -> (Rc<Self>, Rc<Self>, Rc<Self>) {
+    fn split(&self, range: impl RangeBounds<usize>) -> (Arc<Self>, Arc<Self>, Arc<Self>) {
         if self.is_empty() {
             return (Self::new_empty(), Self::new_empty(), Self::new_empty());
         }
@@ -205,7 +205,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
     fn find_element(
         &self,
         _search_strategy: impl FnMut(usize, &<Ag as AggregatedData>::Data, &Ag) -> SearchDirection,
-    ) -> Rc<Self> {
+    ) -> Arc<Self> {
         todo!()
     }
 }

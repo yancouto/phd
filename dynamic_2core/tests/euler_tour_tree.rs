@@ -28,10 +28,19 @@ where
     fn assert_node_order(root: &Node<T>, order: &[i32]) {
         let root = root.inner_bst().root();
         use dynamic_2core::euler_tour_tree::ETData::*;
-        let mut all = (0..root.len()).filter_map(|i| match root.find_kth(i).node_data() {
-            Node(x) => Some(*x),
-            EdgeOut { .. } => None,
-            EdgeIn => Some(-1),
+        let mut prev_is_out = true;
+        assert_eq!(root.len(), (order.len() + 1) / 2 * 3 - 2);
+        let mut all = (0..root.len()).filter_map(|i| {
+            let node = root.find_kth(i);
+            let data = node.node_data();
+            // Well formatted list
+            assert_eq!(matches!(data, Node(_)), prev_is_out);
+            prev_is_out = matches!(data, EdgeOut { .. });
+            match data {
+                Node(x) => Some(*x),
+                EdgeOut { .. } => None,
+                EdgeIn => Some(-1),
+            }
         });
         for x in order.iter() {
             assert_eq!(all.next(), Some(*x));

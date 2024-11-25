@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     marker::PhantomData,
-    sync::{Arc as Rc, Weak},
+    sync::{Arc, Weak},
 };
 
 use crate::implicit_bst::{AggregatedData, ImplicitBST};
@@ -74,7 +74,7 @@ impl<N> AsRef<N> for NodeRef<N> {
 }
 
 #[derive(Clone)]
-pub struct EulerTourTree<BST, Ag>(Rc<BST>, PhantomData<Ag>)
+pub struct EulerTourTree<BST, Ag>(Arc<BST>, PhantomData<Ag>)
 where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData;
@@ -106,7 +106,7 @@ where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
-    fn from_bst(bst: Rc<BST>) -> Self {
+    fn from_bst(bst: Arc<BST>) -> Self {
         Self(EulerTourTree::from_bst(bst))
     }
     /// Makes the given node the root.
@@ -114,7 +114,7 @@ where
         EulerTourTree::reroot_raw(&self.0 .0)
     }
     /// BST used to store the euler tour.
-    pub fn inner_bst(&self) -> Rc<BST> {
+    pub fn inner_bst(&self) -> Arc<BST> {
         self.0 .0.clone()
     }
     pub fn is_connected(&self, node2: &Self) -> bool {
@@ -136,6 +136,7 @@ where
         }
     }
 
+    /// Size of the current subtree of this node.
     pub fn subtree_size(&self) -> usize {
         let root = self.0 .0.root();
         match self.0 .0.order().checked_sub(1) {
@@ -168,7 +169,7 @@ where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
-    fn from_bst(out: Rc<BST>, inp: Rc<BST>) -> Self {
+    fn from_bst(out: Arc<BST>, inp: Arc<BST>) -> Self {
         Self(EulerTourTree::from_bst(out), EulerTourTree::from_bst(inp))
     }
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
@@ -188,7 +189,7 @@ where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
-    fn from_bst(bst: Rc<BST>) -> Self {
+    fn from_bst(bst: Arc<BST>) -> Self {
         Self(bst, PhantomData)
     }
     /// Creates a new EulerTourTree with a single node.
@@ -196,7 +197,7 @@ where
         let bst = BST::new(ETData::Node(node_data));
         NodeRef::from_bst(bst)
     }
-    fn reroot_raw(node: &Rc<BST>) {
+    fn reroot_raw(node: &Arc<BST>) {
         let k = match node.order().checked_sub(1) {
             Some(k) => k,
             // Already the root.
@@ -218,16 +219,16 @@ where
         let inp = BST::new(ETData::EdgeIn); // wu
         let out = BST::new(ETData::EdgeOut {
             data: edge_data,
-            in_ref: Rc::downgrade(&inp),
+            in_ref: Arc::downgrade(&inp),
         }); // uw
         Self::link_root_raw(&node1.0 .0, &root2.0 .0, &out, &inp);
         EdgeRef::from_bst(out, inp)
     }
     fn link_root_raw(
-        node1: &Rc<BST>, // u
-        node2: &Rc<BST>, // w
-        out_edge: &Rc<BST>,
-        in_edge: &Rc<BST>,
+        node1: &Arc<BST>, // u
+        node2: &Arc<BST>, // w
+        out_edge: &Arc<BST>,
+        in_edge: &Arc<BST>,
     ) {
         // "AAA u BBB" and "w CCC" (it is root) becomes
         // AAA u uw w CCC wu BBB
@@ -240,9 +241,9 @@ where
     }
     /// Returns the first elements of each tree, which are the roots. And then the removed in_edge.
     fn disconnect_raw(
-        out_edge: &Rc<BST>,
-        in_edge: Option<&Rc<BST>>,
-    ) -> (Rc<BST>, Rc<BST>, Rc<BST>) {
+        out_edge: &Arc<BST>,
+        in_edge: Option<&Arc<BST>>,
+    ) -> (Arc<BST>, Arc<BST>, Arc<BST>) {
         let in_edge = in_edge.cloned().unwrap_or_else(|| {
             if let ETData::EdgeOut { in_ref, .. } = out_edge.node_data() {
                 or_alg_panic(in_ref.upgrade())

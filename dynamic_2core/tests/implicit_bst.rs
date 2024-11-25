@@ -1,4 +1,4 @@
-use std::sync::Arc as Rc;
+use std::sync::Arc;
 
 use common::slow_bst::SlowBst;
 use common::AggSum;
@@ -9,7 +9,7 @@ mod common;
 struct BSTTests<T: ImplicitBST<AggSum>>(std::marker::PhantomData<T>);
 
 impl<T: ImplicitBST<AggSum>> BSTTests<T> {
-    fn build(v: &[i32]) -> Rc<T> {
+    fn build(v: &[i32]) -> Arc<T> {
         T::from_iter(v.iter().copied()).next().unwrap()
     }
 
