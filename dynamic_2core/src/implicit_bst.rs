@@ -36,6 +36,12 @@ where
     fn root(&self) -> Arc<Self>;
     /// Data associated with this node only.
     fn node_data(&self) -> &Ag::Data;
+    /// Change data associated with this node.
+    fn change_data(&self, f: impl FnOnce(&mut Ag::Data));
+    /// Replace data associated with this node.
+    fn replace_data(&self, new_data: Ag::Data) {
+        self.change_data(|data| *data = new_data);
+    }
     /// Position of the node in the full BST, 0-indexed. Panics if empty.
     fn order(&self) -> usize;
     /// Aggregated data of the subtree.

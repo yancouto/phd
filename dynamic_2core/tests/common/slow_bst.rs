@@ -5,7 +5,10 @@ use std::{
     usize,
 };
 
-use dynamic_2core::{euler_tour_tree::ETAggregated, implicit_bst::*};
+use dynamic_2core::{
+    euler_tour_tree::{ETAggregated, ETData},
+    implicit_bst::*,
+};
 
 use super::AggSum;
 
@@ -208,6 +211,13 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
     ) -> Arc<Self> {
         todo!()
     }
+
+    fn change_data(&self, f: impl FnOnce(&mut Ag::Data)) {
+        assert!(!self.is_empty());
+        let order = self.order();
+        let g = self.group();
+        f(&mut g.write().unwrap().0[order].node_data);
+    }
 }
 
 #[derive(Debug)]
@@ -289,5 +299,9 @@ impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
 
     fn same_node(self: &Arc<Self>, other: &Arc<Self>) -> bool {
         self.0.same_node(&other.0)
+    }
+
+    fn change_data(&self, f: impl FnOnce(&mut ETData<i32, Weak<Self>>)) {
+        self.0.change_data(f);
     }
 }
