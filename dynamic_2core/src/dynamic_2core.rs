@@ -193,18 +193,36 @@ where
         }
         None
     }
+    fn add_extra_edge(&mut self, u: Node, lvl: Level, add: bool) {
+        self.levels[lvl][u].inner_bst().change_data(|d| {
+            if let Some(Data::Node { extra_edges, .. }) = d.data_mut() {
+                if add {
+                    *extra_edges += 1;
+                } else {
+                    *extra_edges -= 1;
+                }
+            } else {
+                panic!("Algorithm error: found a node that is not a node");
+            }
+        });
+    }
     fn add_level_to_edge(&mut self, e_id: EdgeId) {
+        let level = self.edge_info[e_id].level;
+        let (u, v) = self.edge_info[e_id].e;
+        for u in [u, v] {
+            self.u_level_to_id
+                .get_mut(&(u, level))
+                .unwrap()
+                .remove(&e_id);
+            self.u_level_to_id
+                .entry((u, level + 1))
+                .or_default()
+                .insert(e_id);
+            self.add_extra_edge(u, level, false);
+            self.add_extra_edge(u, level + 1, true);
+        }
         let info = &mut self.edge_info[e_id];
-        let (u, v) = info.e;
-        self.u_level_to_id
-            .get_mut(&(u, info.level))
-            .unwrap()
-            .remove(&e_id);
         info.level += 1;
-        self.u_level_to_id
-            .entry((u, info.level))
-            .or_default()
-            .insert(e_id);
         if let Some(levels) = &mut info.levels {
             for r in levels.iter() {
                 r.inner_bst().change_data(|d| {
@@ -263,21 +281,19 @@ where
         if u == v || matches!(entry, Entry::Occupied(_)) {
             return false;
         }
-        let e_id = entry.or_insert(self.edge_info.len());
-        let added = self.levels[0][u].connect(
-            &self.levels[0][v],
-            Data::Edge {
-                level: 0,
-                e_id: *e_id,
-            },
-        );
+        let e_id = *entry.or_insert(self.edge_info.len());
+        let added = self.levels[0][u].connect(&self.levels[0][v], Data::Edge { level: 0, e_id });
+        for u in [u, v] {
+            if added.is_none() {
+                self.add_extra_edge(u, 0, true);
+            }
+            self.u_level_to_id.entry((u, 0)).or_default().insert(e_id);
+        }
         self.edge_info.push(EdgeInfo {
             e: (u, v),
             level: 0,
             levels: added.map(|e| vec![e]),
         });
-        self.u_level_to_id.entry((u, 0)).or_default().insert(*e_id);
-        self.u_level_to_id.entry((v, 0)).or_default().insert(*e_id);
         true
     }
 
@@ -287,14 +303,11 @@ where
             return self.remove_edge(v, u);
         }
         if let Some(id) = self.e_to_id.remove(&(u, v)) {
-            self.u_level_to_id
-                .get_mut(&(u, self.edge_info[id].level))
-                .unwrap()
-                .remove(&id);
-            self.u_level_to_id
-                .get_mut(&(v, self.edge_info[id].level))
-                .unwrap()
-                .remove(&id);
+            let level = self.edge_info[id].level;
+            for u in [u, v] {
+                assert!(self.u_level_to_id.get_mut(&(u, level)).unwrap().remove(&id));
+                self.add_extra_edge(u, level, false);
+            }
             if let Some(levels) = self.edge_info[id].levels.take() {
                 for (i, e) in levels.iter().enumerate().rev() {
                     let (tu, tv) = e.disconnect();
@@ -311,9 +324,13 @@ where
                     while let Some(f_id) = self.find_level_i_extra_edge(i, &small) {
                         let (a, b) = self.edge_info[f_id].e;
                         if !self.levels[i][a].is_connected(&self.levels[i][b]) {
+                            for u in [a, b] {
+                                self.add_extra_edge(u, i, false);
+                            }
+                            let mut rs = vec![];
                             // This is a replacement edge, add it to the tree in this and previous levels, then exit.
-                            for j in (0..=i).rev() {
-                                self.levels[j][a]
+                            for j in 0..=i {
+                                let r = self.levels[j][a]
                                     .connect(
                                         &self.levels[j][b],
                                         Data::Edge {
@@ -322,7 +339,10 @@ where
                                         },
                                     )
                                     .expect("shouldn't be connected at previous level");
+                                rs.push(r);
                             }
+                            assert!(self.edge_info[f_id].levels.is_none());
+                            self.edge_info[f_id].levels = Some(rs);
                             return true;
                         }
                         self.add_level_to_edge(f_id)
