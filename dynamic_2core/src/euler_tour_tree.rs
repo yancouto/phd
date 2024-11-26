@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::implicit_bst::{AggregatedData, ImplicitBST};
+use crate::implicit_bst::{AggregatedData, ImplicitBST, SearchData, SearchDirection};
 
 #[derive(Debug, Clone)]
 pub enum ETData<Data, InRef> {
@@ -168,6 +168,21 @@ where
         let asc_order = ascendant.0 .0.order();
         let desc_order = self.0 .0.order();
         desc_order >= asc_order && desc_order < asc_order + 3 * asc_subtree - 2
+    }
+
+    /// For in-edges, uses the given data.
+    pub fn find_element(
+        &self,
+        mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
+        in_edge_data: Ag::Data,
+    ) -> Arc<BST> {
+        self.0 .0.find_element(|d| {
+            search_strategy(SearchData {
+                current_data: d.current_data.data().unwrap_or(&in_edge_data),
+                left_agg: d.left_agg.data,
+                right_agg: d.right_agg.data,
+            })
+        })
     }
 }
 

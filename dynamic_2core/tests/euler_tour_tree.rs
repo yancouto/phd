@@ -14,6 +14,7 @@ where
 
 type ETT<T> = EulerTourTree<T, AggSum>;
 type Node<T> = NodeRef<ETT<T>>;
+#[allow(dead_code)]
 type Edge<T> = EdgeRef<ETT<T>>;
 
 impl<T> ETTTests<T>
