@@ -18,7 +18,14 @@ pub enum ETData<Data, InRef> {
 }
 
 impl<Data, InRef> ETData<Data, InRef> {
-    fn data(&self) -> Option<&Data> {
+    pub fn data(&self) -> Option<&Data> {
+        match self {
+            ETData::Node(data) => Some(data),
+            ETData::EdgeOut { data, .. } => Some(data),
+            ETData::EdgeIn => None,
+        }
+    }
+    pub fn data_mut(&mut self) -> Option<&mut Data> {
         match self {
             ETData::Node(data) => Some(data),
             ETData::EdgeOut { data, .. } => Some(data),
@@ -182,6 +189,10 @@ where
         let (a, b, _) = EulerTourTree::disconnect_raw(&self.0 .0, Some(&self.1 .0));
         (NodeRef::from_bst(a), NodeRef::from_bst(b))
     }
+    /// BST used to store the euler tour. Reference to the out edge.
+    pub fn inner_bst(&self) -> Arc<BST> {
+        self.0 .0.clone()
+    }
 }
 
 impl<BST, Ag> EulerTourTree<BST, Ag>
@@ -189,13 +200,13 @@ where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
-    fn from_bst(bst: Arc<BST>) -> Self {
-        Self(bst, PhantomData)
-    }
     /// Creates a new EulerTourTree with a single node.
     pub fn new(node_data: Ag::Data) -> NodeRef<Self> {
         let bst = BST::new(ETData::Node(node_data));
         NodeRef::from_bst(bst)
+    }
+    fn from_bst(bst: Arc<BST>) -> Self {
+        Self(bst, PhantomData)
     }
     fn reroot_raw(node: &Arc<BST>) {
         let k = match node.order().checked_sub(1) {

@@ -10,6 +10,17 @@ pub trait AggregatedData: Debug + Sized + Clone + Default {
     fn merge(self, right: Self) -> Self;
 }
 
+#[derive(Debug)]
+pub struct SearchData<'a, Ag: AggregatedData> {
+    /// Data of the current node being looked at.
+    pub current_data: &'a Ag::Data,
+    /// Aggregated data of the left subtree.
+    pub left_agg: Ag,
+    /// Aggregated data of the right subtree.
+    pub right_agg: Ag,
+}
+
+#[derive(Debug)]
 pub enum SearchDirection {
     Found,
     NotFound,
@@ -53,7 +64,7 @@ where
     /// Find an element by giving a search strategy.
     fn find_element(
         &self,
-        search_strategy: impl FnMut(usize, &Ag::Data, &Ag) -> SearchDirection,
+        search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Arc<Self>;
     /// K-th element in the subtree. (0-indexed on the subtree)
     fn find_kth(&self, k: usize) -> Arc<Self>;

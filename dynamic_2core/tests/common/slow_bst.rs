@@ -207,9 +207,27 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
 
     fn find_element(
         &self,
-        _search_strategy: impl FnMut(usize, &<Ag as AggregatedData>::Data, &Ag) -> SearchDirection,
+        mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Arc<Self> {
-        todo!()
+        if self.is_empty() {
+            return Self::new_empty();
+        }
+        let g = self.group();
+        let mut left_agg = Ag::default();
+        for (i, data) in g.read().unwrap().0.iter().enumerate() {
+            use SearchDirection::*;
+            match search_strategy(SearchData {
+                current_data: &data.node_data,
+                left_agg: left_agg.clone(),
+                right_agg: self.range_agg(i + 1..),
+            }) {
+                Found => return Self::from(data.node_idx),
+                NotFound | Left => return Self::new_empty(),
+                Right => {}
+            }
+            left_agg = left_agg.merge(Ag::from(&data.node_data));
+        }
+        Self::new_empty()
     }
 
     fn change_data(&self, f: impl FnOnce(&mut Ag::Data)) {
@@ -272,9 +290,7 @@ impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
     fn find_element(
         &self,
         search_strategy: impl FnMut(
-            usize,
-            &<ETAggregated<AggSum, Weak<SlowET>> as AggregatedData>::Data,
-            &ETAggregated<AggSum, Weak<SlowET>>,
+            SearchData<'_, ETAggregated<AggSum, Weak<SlowET>>>,
         ) -> SearchDirection,
     ) -> Arc<Self> {
         Self::from(self.0.find_element(search_strategy))
