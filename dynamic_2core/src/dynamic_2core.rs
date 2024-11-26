@@ -1,5 +1,5 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
     sync::Weak,
 };
 
@@ -23,24 +23,39 @@ pub trait Dynamic2CoreSolver {
     fn is_in_1core(&self, u: usize) -> bool;
 }
 
-#[derive(Debug, Clone)]
+type Level = usize;
+type Node = usize;
+type EdgeId = usize;
+#[derive(Clone)]
 pub enum Data {
     Node {
         /// Extra edges ON THIS LEVEL only
         extra_edges: usize,
-        idx: usize,
+        idx: Node,
     },
     Edge {
         // Level of this tree edge
-        level: usize,
-        e_id: usize,
+        level: Level,
+        e_id: EdgeId,
     },
+}
+
+impl std::fmt::Debug for Data {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Data::Node {
+                extra_edges: _,
+                idx,
+            } => write!(f, "{}", idx),
+            Data::Edge { level: _, e_id } => write!(f, "{}", e_id),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct AgData {
     /// Minimum level of edge in range
-    min_edge_level: usize,
+    min_edge_level: Level,
     /// Total extra edges in this level in this range
     total_extra_edges: usize,
 }
@@ -70,51 +85,20 @@ impl AggregatedData for AgData {
     }
 }
 
+#[derive(Debug)]
 struct EdgeInfo<BST>
 where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
     /// u < v
-    e: (usize, usize),
+    e: (Node, Node),
     /// Level of the edge
-    level: usize,
+    level: Level,
     /// One reference for each level. If None, it is an extra edge.
     levels: Option<Vec<EdgeRef<EulerTourTree<BST, AgData>>>>,
 }
 
-impl<BST> EdgeInfo<BST>
-where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
-{
-    fn add_level(&mut self, solver_levels: &Vec<Vec<NodeRef<EulerTourTree<BST, AgData>>>>) {
-        let (u, v) = self.e;
-        self.level += 1;
-        if let Some(levels) = &mut self.levels {
-            let mut e_id = None;
-            for r in levels.iter() {
-                r.inner_bst().change_data(|d| {
-                    if let Some(Data::Edge { e_id: id, level }) = d.data_mut() {
-                        e_id = Some(*id);
-                        *level += 1;
-                    } else {
-                        panic!("Algorithm error: found a node that is not an edge");
-                    }
-                });
-            }
-            levels.push(
-                solver_levels[self.level][u]
-                    .connect(
-                        &solver_levels[self.level][v],
-                        Data::Edge {
-                            level: self.level,
-                            e_id: e_id.expect("must have found id"),
-                        },
-                    )
-                    .expect("shouldn't be connected at next level"),
-            );
-        }
-    }
-}
+impl<BST> EdgeInfo<BST> where BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>> {}
 
 pub struct ETTSolver<BST>
 where
@@ -124,7 +108,20 @@ where
     levels: Vec<Vec<NodeRef<EulerTourTree<BST, AgData>>>>,
     edge_info: Vec<EdgeInfo<BST>>,
     // (u, v) -> id
-    e_to_id: BTreeMap<(usize, usize), usize>,
+    e_to_id: BTreeMap<(Node, Node), usize>,
+    u_level_to_id: BTreeMap<(Node, Level), BTreeSet<EdgeId>>,
+}
+
+impl<BST> std::fmt::Debug for ETTSolver<BST>
+where
+    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ETTSolver")
+            .field("ETT level 0", &self.levels[0][0])
+            .field("all_edges", &self.e_to_id.keys())
+            .finish()
+    }
 }
 
 impl<BST> ETTSolver<BST>
@@ -133,9 +130,9 @@ where
 {
     fn find_level_i_tree_edge(
         &self,
-        i: usize,
+        i: Level,
         node: &NodeRef<EulerTourTree<BST, AgData>>,
-    ) -> Option<usize> {
+    ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
         let found = node.find_element(
             |d| {
@@ -164,9 +161,9 @@ where
     }
     fn find_level_i_extra_edge(
         &self,
-        _i: usize,
+        i: Level,
         node: &NodeRef<EulerTourTree<BST, AgData>>,
-    ) -> Option<usize> {
+    ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
         let found = node.find_element(
             |d| {
@@ -186,12 +183,50 @@ where
             },
         );
         if !found.is_empty() {
-            if let Some(Data::Node { idx, .. }) = found.node_data().data() {
-                return Some(*idx);
+            if let Some(Data::Node { idx: u, .. }) = found.node_data().data() {
+                let id = self.u_level_to_id[&(*u, i)]
+                    .first()
+                    .expect("missing extra edge");
+                return Some(*id);
             }
             panic!("Algorithm error: found a node that is not a node");
         }
         None
+    }
+    fn add_level_to_edge(&mut self, e_id: EdgeId) {
+        let info = &mut self.edge_info[e_id];
+        let (u, v) = info.e;
+        self.u_level_to_id
+            .get_mut(&(u, info.level))
+            .unwrap()
+            .remove(&e_id);
+        info.level += 1;
+        self.u_level_to_id
+            .entry((u, info.level))
+            .or_default()
+            .insert(e_id);
+        if let Some(levels) = &mut info.levels {
+            for r in levels.iter() {
+                r.inner_bst().change_data(|d| {
+                    if let Some(Data::Edge { level, .. }) = d.data_mut() {
+                        *level += 1;
+                    } else {
+                        panic!("Algorithm error: found a node that is not an edge");
+                    }
+                });
+            }
+            levels.push(
+                self.levels[info.level][u]
+                    .connect(
+                        &self.levels[info.level][v],
+                        Data::Edge {
+                            level: info.level,
+                            e_id,
+                        },
+                    )
+                    .expect("shouldn't be connected at next level"),
+            );
+        }
     }
 }
 
@@ -216,6 +251,7 @@ where
                 .collect(),
             edge_info: Vec::new(),
             e_to_id: BTreeMap::new(),
+            u_level_to_id: BTreeMap::new(),
         }
     }
 
@@ -240,11 +276,25 @@ where
             level: 0,
             levels: added.map(|e| vec![e]),
         });
+        self.u_level_to_id.entry((u, 0)).or_default().insert(*e_id);
+        self.u_level_to_id.entry((v, 0)).or_default().insert(*e_id);
         true
     }
 
+    // test failing
     fn remove_edge(&mut self, u: usize, v: usize) -> bool {
+        if u > v {
+            return self.remove_edge(v, u);
+        }
         if let Some(id) = self.e_to_id.remove(&(u, v)) {
+            self.u_level_to_id
+                .get_mut(&(u, self.edge_info[id].level))
+                .unwrap()
+                .remove(&id);
+            self.u_level_to_id
+                .get_mut(&(v, self.edge_info[id].level))
+                .unwrap()
+                .remove(&id);
             if let Some(levels) = self.edge_info[id].levels.take() {
                 for (i, e) in levels.iter().enumerate().rev() {
                     let (tu, tv) = e.disconnect();
@@ -255,7 +305,7 @@ where
                     };
                     // Move all tree edges of level i to i + 1
                     while let Some(f_id) = self.find_level_i_tree_edge(i, &small) {
-                        self.edge_info[f_id].add_level(&self.levels);
+                        self.add_level_to_edge(f_id);
                     }
                     // For all extra edges of level i, check if they replace the removed edge, and move them to level i + 1
                     while let Some(f_id) = self.find_level_i_extra_edge(i, &small) {
@@ -275,7 +325,7 @@ where
                             }
                             return true;
                         }
-                        self.edge_info[f_id].add_level(&self.levels);
+                        self.add_level_to_edge(f_id)
                     }
                 }
             }

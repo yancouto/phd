@@ -6,7 +6,7 @@ use std::{
 
 use crate::implicit_bst::{AggregatedData, ImplicitBST, SearchData, SearchDirection};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ETData<Data, InRef> {
     Node(Data),
     EdgeOut {
@@ -15,6 +15,16 @@ pub enum ETData<Data, InRef> {
         in_ref: InRef,
     },
     EdgeIn,
+}
+
+impl<Data: std::fmt::Debug, InRef> std::fmt::Debug for ETData<Data, InRef> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ETData::Node(data) => write!(f, "Node({:?})", data),
+            ETData::EdgeOut { data, .. } => write!(f, "EdgeOut({:?})", data),
+            ETData::EdgeIn => write!(f, "EdgeIn"),
+        }
+    }
 }
 
 impl<Data, InRef> ETData<Data, InRef> {

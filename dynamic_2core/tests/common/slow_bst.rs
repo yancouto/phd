@@ -5,10 +5,7 @@ use std::{
     usize,
 };
 
-use dynamic_2core::{
-    euler_tour_tree::{ETAggregated, ETData},
-    implicit_bst::*,
-};
+use dynamic_2core::{dynamic_2core::AgData, euler_tour_tree::ETAggregated, implicit_bst::*};
 
 use super::AggSum;
 
@@ -239,34 +236,46 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
 }
 
 #[derive(Debug)]
-pub struct SlowET(Arc<SlowBst<ETAggregated<AggSum, Weak<SlowET>>>>);
+pub struct SlowET<Ag: AggregatedData = AggSum>(Arc<SlowBst<ETAggregated<Ag, Weak<SlowET<Ag>>>>>);
 
-static GROUPS2: RwLock<Vec<Arc<RwLock<Group<ETAggregated<AggSum, Weak<SlowET>>>>>>> =
+static GROUPS2: RwLock<Vec<Arc<RwLock<Group<ETAggregated<AggSum, Weak<SlowET<AggSum>>>>>>>> =
     RwLock::new(vec![]);
 
-impl SlowBstData for ETAggregated<AggSum, Weak<SlowET>> {
+impl SlowBstData for ETAggregated<AggSum, Weak<SlowET<AggSum>>> {
     fn map() -> &'static RwLock<Vec<Arc<RwLock<Group<Self>>>>> {
         &GROUPS2
     }
 }
 
-impl SlowET {
-    fn from(bst: Arc<SlowBst<ETAggregated<AggSum, Weak<SlowET>>>>) -> Arc<Self> {
+impl<Ag: AggregatedData> SlowET<Ag> {
+    fn from(bst: Arc<SlowBst<ETAggregated<Ag, Weak<SlowET<Ag>>>>>) -> Arc<Self> {
         Arc::new(Self(bst))
     }
 }
 
-impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
+static GROUPS3: RwLock<Vec<Arc<RwLock<Group<ETAggregated<AgData, Weak<SlowET<AgData>>>>>>>> =
+    RwLock::new(vec![]);
+
+impl SlowBstData for ETAggregated<AgData, Weak<SlowET<AgData>>> {
+    fn map() -> &'static RwLock<Vec<Arc<RwLock<Group<Self>>>>> {
+        &GROUPS3
+    }
+}
+
+impl<Ag: AggregatedData> ImplicitBST<ETAggregated<Ag, Weak<SlowET<Ag>>>> for SlowET<Ag>
+where
+    ETAggregated<Ag, Weak<SlowET<Ag>>>: SlowBstData,
+{
     fn new_empty() -> Arc<Self> {
         Self::from(SlowBst::new_empty())
     }
 
-    fn new(data: <ETAggregated<AggSum, Weak<SlowET>> as AggregatedData>::Data) -> Arc<Self> {
+    fn new(data: <ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data) -> Arc<Self> {
         Self::from(SlowBst::new(data))
     }
 
     fn from_iter(
-        data: impl IntoIterator<Item = <ETAggregated<AggSum, Weak<SlowET>> as AggregatedData>::Data>,
+        data: impl IntoIterator<Item = <ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data>,
     ) -> impl Iterator<Item = Arc<Self>> {
         SlowBst::from_iter(data).map(Self::from)
     }
@@ -275,7 +284,7 @@ impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
         Self::from(self.0.root())
     }
 
-    fn node_data(&self) -> &<ETAggregated<AggSum, Weak<SlowET>> as AggregatedData>::Data {
+    fn node_data(&self) -> &<ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data {
         self.0.node_data()
     }
 
@@ -283,15 +292,13 @@ impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
         self.0.order()
     }
 
-    fn range_agg(&self, range: impl RangeBounds<usize>) -> ETAggregated<AggSum, Weak<SlowET>> {
+    fn range_agg(&self, range: impl RangeBounds<usize>) -> ETAggregated<Ag, Weak<Self>> {
         self.0.range_agg(range)
     }
 
     fn find_element(
         &self,
-        search_strategy: impl FnMut(
-            SearchData<'_, ETAggregated<AggSum, Weak<SlowET>>>,
-        ) -> SearchDirection,
+        search_strategy: impl FnMut(SearchData<'_, ETAggregated<Ag, Weak<Self>>>) -> SearchDirection,
     ) -> Arc<Self> {
         Self::from(self.0.find_element(search_strategy))
     }
@@ -317,7 +324,10 @@ impl ImplicitBST<ETAggregated<AggSum, Weak<SlowET>>> for SlowET {
         self.0.same_node(&other.0)
     }
 
-    fn change_data(&self, f: impl FnOnce(&mut ETData<i32, Weak<Self>>)) {
+    fn change_data(
+        &self,
+        f: impl FnOnce(&mut <ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data),
+    ) {
         self.0.change_data(f);
     }
 }
