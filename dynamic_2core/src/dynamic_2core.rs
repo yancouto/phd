@@ -1,10 +1,11 @@
 use std::{
+    assert_matches::assert_matches,
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Weak},
 };
 
 use crate::{
-    euler_tour_tree::{ETAggregated, EdgeRef, EulerTourTree, NodeRef},
+    euler_tour_tree::{ETAggregated, ETData, EdgeRef, EulerTourTree, NodeRef},
     implicit_bst::{AggregatedData, ImplicitBST, SearchDirection},
 };
 
@@ -46,7 +47,7 @@ impl std::fmt::Debug for Data {
             Data::Node {
                 extra_edges: _,
                 idx,
-            } => write!(f, "{}", idx),
+            } => write!(f, "({})", idx),
             Data::Edge { level: _, e_id } => write!(f, "{}", e_id),
         }
     }
@@ -113,7 +114,14 @@ where
     levels: Option<Vec<EdgeRef<EulerTourTree<BST, AgData>>>>,
 }
 
-impl<BST> EdgeInfo<BST> where BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>> {}
+impl<BST> EdgeInfo<BST>
+where
+    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+{
+    fn is_extra(&self) -> bool {
+        self.levels.is_none()
+    }
+}
 
 pub struct ETTSolver<BST>
 where
@@ -153,14 +161,43 @@ impl<BST> ETTSolver<BST>
 where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
+    fn assert_data(&self, node: &Arc<BST>, lvl: Level) {
+        if node.is_empty() {
+            return;
+        }
+        use ETData::*;
+        match node.node_data() {
+            Node(Data::Node { idx, extra_edges }) => {
+                assert_eq!(
+                    self.u_level_to_id[&(idx, lvl)].len(),
+                    extra_edges,
+                    "wrong extra edge count"
+                );
+            }
+            Edge {
+                data: Data::Edge { e_id, level },
+                other: _,
+            } => {
+                assert!(level >= lvl, "tree edge has level smaller than ETT level");
+                assert_eq!(
+                    self.edge_info[e_id].level, level,
+                    "tree edge has diff level in info and data"
+                );
+            }
+            _ => panic!("Invalid data"),
+        }
+    }
     fn find_level_i_tree_edge(
         &self,
         i: Level,
         node: &NodeRef<EulerTourTree<BST, AgData>>,
     ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
+        // println!("Looking for tree edge at level {}", i);
         let found = node.find_element(|d| {
+            // println!("Checking {:?}", d);
             if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
+                // println!("edge level {}", d.current_data.unwrap_edge().1);
                 SearchDirection::Found
             } else if d.left_agg.min_edge_level <= i {
                 SearchDirection::Left
@@ -171,7 +208,10 @@ where
             }
         });
         if !found.is_empty() {
-            return Some(found.node_data().data().unwrap_edge().0);
+            let (id, _) = found.node_data().data().unwrap_edge();
+            // println!("Found edge {} at level {}", id, i);
+            self.assert_data(&found, i);
+            return Some(id);
         }
         None
     }
@@ -193,10 +233,17 @@ where
             }
         });
         if !found.is_empty() {
-            let (u, _) = found.node_data().data().unwrap_node();
+            let (u, extra_count) = found.node_data().data().unwrap_node();
+            assert_eq!(
+                self.u_level_to_id[&(u, i)].len(),
+                extra_count,
+                "extra count mismatch"
+            );
             let id = self.u_level_to_id[&(u, i)]
                 .first()
                 .expect("missing extra edge");
+            assert_matches!(self.edge_info[*id].levels, None, "extra edge is not extra");
+            assert_eq!(self.edge_info[*id].level, i, "extra edge has wrong level");
             return Some(*id);
         }
         None
@@ -215,7 +262,7 @@ where
         let ((u, v), lvl) = self.edge(e_id);
         assert!(self.e_to_id.insert((u, v), e_id).is_none());
         for u in [u, v] {
-            if self.edge_info[e_id].levels.is_none() {
+            if self.edge_info[e_id].is_extra() {
                 assert!(self.u_level_to_id.entry((u, lvl)).or_default().insert(e_id));
                 self.mod_extra_edges(u, lvl, |extra_edges| *extra_edges += 1);
             }
@@ -238,8 +285,8 @@ where
         self.edge_info[e_id].level = lvl + 1;
         self.add_edge_id(e_id);
         if let Some(levels) = &mut self.edge_info[e_id].levels {
-            for r in levels.iter() {
-                r.inner_bst().change_data(|d| {
+            for r in levels.iter().map(|e| e.inner_bst()).flatten() {
+                r.change_data(|d| {
                     if let Data::Edge { level, .. } = d.data_mut() {
                         *level = lvl + 1;
                     } else {
@@ -256,6 +303,7 @@ where
                     .connect(&self.levels[lvl + 1][v], e.clone(), e)
                     .expect("shouldn't be connected at next level"),
             );
+            assert_eq!(levels.len(), lvl + 2, "edge has wrong number of levels");
         }
     }
     fn edge(&self, e_id: EdgeId) -> ((Node, Node), Level) {
@@ -268,7 +316,8 @@ where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
     fn new(n: usize) -> Self {
-        let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 12;
+        // TODO: Change to +1
+        let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 10;
         Self {
             levels: (0..log2n)
                 .map(|_| {
@@ -332,8 +381,11 @@ where
                 .collect();
 
             for (i, small) in smallest_comp.into_iter().enumerate().rev() {
+                // println!("Looking for edge at level {}", i);
                 // Move all tree edges of level i to i + 1
                 while let Some(f_id) = self.find_level_i_tree_edge(i, &small) {
+                    assert_matches!(self.edge_info[f_id].levels, Some(_));
+                    assert_eq!(self.edge_info[f_id].level, i, "edge has wrong level");
                     self.add_level_to_edge(f_id);
                 }
                 // For all extra edges of level i, check if they replace the removed edge, and move them to level i + 1

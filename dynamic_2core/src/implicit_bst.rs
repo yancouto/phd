@@ -45,8 +45,9 @@ where
 
     /// Returns the root of the tree containing this node.
     fn root(&self) -> Arc<Self>;
+    // TODO: Make this a reference?
     /// Data associated with this node only.
-    fn node_data(&self) -> &Ag::Data;
+    fn node_data(&self) -> Ag::Data;
     /// Change data associated with this node.
     fn change_data(&self, f: impl FnOnce(&mut Ag::Data));
     /// Replace data associated with this node.

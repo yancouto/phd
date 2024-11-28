@@ -80,7 +80,11 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
             arc: node.clone(),
             node_data: data,
         }]);
-        Ag::map().write().unwrap().push(Arc::new(RwLock::new(g)));
+        let g = Arc::new(RwLock::new(g));
+        unsafe {
+            Arc::increment_strong_count(Arc::as_ptr(&g));
+        }
+        Ag::map().write().unwrap().push(g);
         node
     }
 
@@ -110,9 +114,9 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
         root_idx
     }
 
-    fn node_data(&self) -> &Ag::Data {
-        // TRUST ME
-        unsafe { &*(&self.group().read().unwrap().0[self.order()].node_data as *const _) }
+    fn node_data(&self) -> Ag::Data {
+        let order = self.order();
+        self.group().read().unwrap().0[order].node_data.clone()
     }
 
     fn order(&self) -> usize {
@@ -309,7 +313,7 @@ where
         Self::from(self.0.root())
     }
 
-    fn node_data(&self) -> &<ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data {
+    fn node_data(&self) -> <ETAggregated<Ag, Weak<Self>> as AggregatedData>::Data {
         self.0.node_data()
     }
 

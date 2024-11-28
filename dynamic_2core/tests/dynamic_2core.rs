@@ -1,5 +1,5 @@
 use rand::{Rng, SeedableRng};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use common::slow_bst::SlowET;
 use dynamic_2core::dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver};
@@ -65,7 +65,7 @@ where
                 let added = t1.add_edge(u, v);
                 assert_eq!(added, t2.add_edge(u, v));
                 if added {
-                    println!("Added edge {} {}\n{:?}\n", u, v, &t1);
+                    // println!("Added edge {} {}\n{:?}\n", u, v, &t1);
                     edges.push((u, v));
                 }
             } else {
@@ -73,7 +73,7 @@ where
                 let (u, v) = edges[idx];
                 assert_eq!(t1.remove_edge(u, v), t2.remove_edge(u, v));
                 edges.swap_remove(idx);
-                println!("Removed edge {} {}\n{:?}\n", u, v, &t1);
+                // println!("Removed edge {} {}\n{:?}\n", u, v, &t1);
             }
             if q % 1 == 0 {
                 let gs = t2.groups();

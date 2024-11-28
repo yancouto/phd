@@ -19,7 +19,7 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
         let bst = bst.root();
         assert_eq!(bst.len(), data.len());
         for i in 0..data.len() {
-            assert_eq!(*bst.find_kth(i).node_data(), data[i]);
+            assert_eq!(bst.find_kth(i).node_data(), data[i]);
         }
     }
 
@@ -28,8 +28,8 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
             return false;
         }
         for i in 0..bst1.len() {
-            let n1 = *bst1.find_kth(i).node_data();
-            let n2 = *bst2.find_kth(i).node_data();
+            let n1 = bst1.find_kth(i).node_data();
+            let n2 = bst2.find_kth(i).node_data();
             if n1 != n2 {
                 return false;
             }
@@ -45,7 +45,7 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
     fn test_new() {
         let bst = T::new(1);
         assert_eq!(bst.total_agg(), 1);
-        assert_eq!(bst.node_data(), &1);
+        assert_eq!(bst.node_data(), 1);
     }
 
     fn test_concat() {
@@ -53,9 +53,9 @@ impl<T: ImplicitBST<AggSum>> BSTTests<T> {
         let bst2 = Self::build(&[8, 12, 10]);
         let bst = bst1.concat(&bst2);
         assert_eq!(bst.total_agg(), 36);
-        assert_eq!(bst.find_kth(3).node_data(), &8);
-        assert_eq!(bst.find_kth(2).node_data(), &3);
-        assert_eq!(bst.find_kth(0).node_data(), &1);
+        assert_eq!(bst.find_kth(3).node_data(), 8);
+        assert_eq!(bst.find_kth(2).node_data(), 3);
+        assert_eq!(bst.find_kth(0).node_data(), 1);
         assert!(bst.find_kth(6).is_empty());
         Self::assert_data(&bst, &[1, 2, 3, 8, 12, 10]);
     }

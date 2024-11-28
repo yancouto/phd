@@ -164,12 +164,12 @@ where
         }
     }
 
-    /// For in-edges, uses the given data.
+    /// Finds an element in the tree containing this node.
     pub fn find_element(
         &self,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Arc<BST> {
-        self.0 .0.find_element(|d| {
+        self.0 .0.root().find_element(|d| {
             search_strategy(SearchData {
                 current_data: d.current_data.data(),
                 left_agg: d.left_agg.data,
@@ -203,8 +203,8 @@ where
         (NodeRef::from_bst(a), NodeRef::from_bst(b))
     }
     /// BST used to store the euler tour. Reference to the out edge.
-    pub fn inner_bst(&self) -> Arc<BST> {
-        self.0 .0.clone()
+    pub fn inner_bst(&self) -> [Arc<BST>; 2] {
+        [self.0 .0.clone(), self.1 .0.clone()]
     }
 }
 
