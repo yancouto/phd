@@ -269,7 +269,12 @@ impl SlowBstData for ETAggregated<AggSum, Weak<SlowET<AggSum>>> {
 
 impl<Ag: AggregatedData> SlowET<Ag> {
     fn from(bst: Arc<SlowBst<ETAggregated<Ag, Weak<SlowET<Ag>>>>>) -> Arc<Self> {
-        Arc::new(Self(bst))
+        let p = Arc::new(Self(bst));
+        // Let's cheat because we don't use pointers properly
+        unsafe {
+            Arc::increment_strong_count(Arc::as_ptr(&p));
+        }
+        p
     }
 }
 

@@ -29,14 +29,14 @@ type EdgeId = usize;
 #[derive(Clone)]
 pub enum Data {
     Node {
+        idx: Node,
         /// Extra edges ON THIS LEVEL only
         extra_edges: usize,
-        idx: Node,
     },
     Edge {
+        e_id: EdgeId,
         // Level of this tree edge
         level: Level,
-        e_id: EdgeId,
     },
 }
 
@@ -48,6 +48,21 @@ impl std::fmt::Debug for Data {
                 idx,
             } => write!(f, "{}", idx),
             Data::Edge { level: _, e_id } => write!(f, "{}", e_id),
+        }
+    }
+}
+
+impl Data {
+    fn unwrap_node(&self) -> (Node, usize) {
+        match self {
+            Data::Node { idx, extra_edges } => (*idx, *extra_edges),
+            _ => panic!("Expected Node"),
+        }
+    }
+    fn unwrap_edge(&self) -> (EdgeId, Level) {
+        match self {
+            Data::Edge { e_id, level } => (*e_id, *level),
+            _ => panic!("Expected Edge"),
         }
     }
 }
@@ -144,28 +159,19 @@ where
         node: &NodeRef<EulerTourTree<BST, AgData>>,
     ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
-        let found = node.find_element(
-            |d| {
-                if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
-                    SearchDirection::Found
-                } else if d.left_agg.min_edge_level <= i {
-                    SearchDirection::Left
-                } else if d.right_agg.min_edge_level <= i {
-                    SearchDirection::Right
-                } else {
-                    SearchDirection::NotFound
-                }
-            },
-            Data::Node {
-                extra_edges: 0,
-                idx: usize::MAX,
-            },
-        );
-        if !found.is_empty() {
-            if let Some(Data::Edge { e_id, .. }) = found.node_data().data() {
-                return Some(*e_id);
+        let found = node.find_element(|d| {
+            if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
+                SearchDirection::Found
+            } else if d.left_agg.min_edge_level <= i {
+                SearchDirection::Left
+            } else if d.right_agg.min_edge_level <= i {
+                SearchDirection::Right
+            } else {
+                SearchDirection::NotFound
             }
-            panic!("Algorithm error: found a node that is not an edge");
+        });
+        if !found.is_empty() {
+            return Some(found.node_data().data().unwrap_edge().0);
         }
         None
     }
@@ -175,37 +181,29 @@ where
         node: &NodeRef<EulerTourTree<BST, AgData>>,
     ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
-        let found = node.find_element(
-            |d| {
-                if matches!(d.current_data, Data::Node { extra_edges, .. } if *extra_edges > 0) {
-                    SearchDirection::Found
-                } else if d.left_agg.total_extra_edges > 0 {
-                    SearchDirection::Left
-                } else if d.right_agg.total_extra_edges > 0 {
-                    SearchDirection::Right
-                } else {
-                    SearchDirection::NotFound
-                }
-            },
-            Data::Node {
-                extra_edges: 0,
-                idx: usize::MAX,
-            },
-        );
-        if !found.is_empty() {
-            if let Some(Data::Node { idx: u, .. }) = found.node_data().data() {
-                let id = self.u_level_to_id[&(*u, i)]
-                    .first()
-                    .expect("missing extra edge");
-                return Some(*id);
+        let found = node.find_element(|d| {
+            if matches!(d.current_data, Data::Node { extra_edges, .. } if *extra_edges > 0) {
+                SearchDirection::Found
+            } else if d.left_agg.total_extra_edges > 0 {
+                SearchDirection::Left
+            } else if d.right_agg.total_extra_edges > 0 {
+                SearchDirection::Right
+            } else {
+                SearchDirection::NotFound
             }
-            panic!("Algorithm error: found a node that is not a node");
+        });
+        if !found.is_empty() {
+            let (u, _) = found.node_data().data().unwrap_node();
+            let id = self.u_level_to_id[&(u, i)]
+                .first()
+                .expect("missing extra edge");
+            return Some(*id);
         }
         None
     }
     fn mod_extra_edges(&mut self, u: Node, lvl: Level, f: impl FnOnce(&mut usize)) {
         self.levels[lvl][u].inner_bst().change_data(|d| {
-            if let Some(Data::Node { extra_edges, .. }) = d.data_mut() {
+            if let Data::Node { extra_edges, .. } = d.data_mut() {
                 f(extra_edges);
             } else {
                 panic!("Algorithm error: found a node that is not a node");
@@ -237,27 +235,25 @@ where
     fn add_level_to_edge(&mut self, e_id: EdgeId) {
         let ((u, v), lvl) = self.edge(e_id);
         self.rem_edge_id(e_id);
-        self.edge_info[e_id].level += 1;
+        self.edge_info[e_id].level = lvl + 1;
         self.add_edge_id(e_id);
         if let Some(levels) = &mut self.edge_info[e_id].levels {
             for r in levels.iter() {
                 r.inner_bst().change_data(|d| {
-                    if let Some(Data::Edge { level, .. }) = d.data_mut() {
+                    if let Data::Edge { level, .. } = d.data_mut() {
                         *level = lvl + 1;
                     } else {
                         panic!("Algorithm error: found a node that is not an edge");
                     }
                 });
             }
+            let e = Data::Edge {
+                level: lvl + 1,
+                e_id,
+            };
             levels.push(
                 self.levels[lvl + 1][u]
-                    .connect(
-                        &self.levels[lvl + 1][v],
-                        Data::Edge {
-                            level: lvl + 1,
-                            e_id,
-                        },
-                    )
+                    .connect(&self.levels[lvl + 1][v], e.clone(), e)
                     .expect("shouldn't be connected at next level"),
             );
         }
@@ -272,7 +268,7 @@ where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
     fn new(n: usize) -> Self {
-        let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 1;
+        let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 12;
         Self {
             levels: (0..log2n)
                 .map(|_| {
@@ -300,7 +296,8 @@ where
             return false;
         }
         let e_id = self.edge_info.len();
-        let added = self.levels[0][u].connect(&self.levels[0][v], Data::Edge { level: 0, e_id });
+        let e = Data::Edge { level: 0, e_id };
+        let added = self.levels[0][u].connect(&self.levels[0][v], e.clone(), e);
         self.edge_info.push(EdgeInfo {
             e: (u, v),
             level: 0,
@@ -326,7 +323,7 @@ where
                 .iter()
                 .map(|e| {
                     let (tu, tv) = e.disconnect();
-                    if tu.subtree_size() < tv.subtree_size() {
+                    if tu.tree_size() < tv.tree_size() {
                         tu
                     } else {
                         tv
@@ -346,15 +343,13 @@ where
                         self.rem_edge_id(f_id);
                         let mut rs = vec![];
                         // This is a replacement edge, add it to the tree in this and previous levels, then exit.
+                        let e = Data::Edge {
+                            level: i,
+                            e_id: f_id,
+                        };
                         for j in 0..=i {
                             let r = self.levels[j][a]
-                                .connect(
-                                    &self.levels[j][b],
-                                    Data::Edge {
-                                        level: i,
-                                        e_id: f_id,
-                                    },
-                                )
+                                .connect(&self.levels[j][b], e.clone(), e.clone())
                                 .expect("shouldn't be connected at previous level");
                             rs.push(r);
                         }
@@ -382,7 +377,6 @@ where
     fn is_in_1core(&self, u: usize) -> bool {
         let u = &self.levels[0][u];
         // Definitely can be more efficient, O(1), but this works
-        u.reroot();
-        u.subtree_size() > 1
+        u.tree_size() > 1
     }
 }

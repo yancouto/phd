@@ -7,14 +7,13 @@ use std::{
 use crate::implicit_bst::{AggregatedData, ImplicitBST, SearchData, SearchDirection};
 
 #[derive(Clone)]
-pub enum ETData<Data, InRef> {
+pub enum ETData<Data, Ref> {
     Node(Data),
-    EdgeOut {
+    Edge {
         data: Data,
-        /// Reference to matching in_edge
-        in_ref: InRef,
+        /// Reference to matching edge
+        other: Ref,
     },
-    EdgeIn,
 }
 
 impl<Data: std::fmt::Debug, InRef> std::fmt::Debug for ETData<Data, InRef> {
@@ -23,25 +22,34 @@ impl<Data: std::fmt::Debug, InRef> std::fmt::Debug for ETData<Data, InRef> {
             ETData::Node(data) => write!(f, "Node({:?})", data),
             //ETData::EdgeOut { data, .. } => write!(f, "EdgeOut({:?})", data),
             //ETData::EdgeIn => write!(f, "EdgeIn"),
-            ETData::EdgeOut { data, .. } => write!(f, ">"),
-            ETData::EdgeIn => write!(f, "<"),
+            ETData::Edge { .. } => write!(f, "."),
         }
     }
 }
 
-impl<Data, InRef> ETData<Data, InRef> {
-    pub fn data(&self) -> Option<&Data> {
+impl<Data, Ref> ETData<Data, Ref> {
+    pub fn data(&self) -> &Data {
         match self {
-            ETData::Node(data) => Some(data),
-            ETData::EdgeOut { data, .. } => Some(data),
-            ETData::EdgeIn => None,
+            ETData::Node(data) => data,
+            ETData::Edge { data, .. } => data,
         }
     }
-    pub fn data_mut(&mut self) -> Option<&mut Data> {
+    pub fn data_mut(&mut self) -> &mut Data {
         match self {
-            ETData::Node(data) => Some(data),
-            ETData::EdgeOut { data, .. } => Some(data),
-            ETData::EdgeIn => None,
+            ETData::Node(data) => data,
+            ETData::Edge { data, .. } => data,
+        }
+    }
+    fn unwrap_node(&self) -> &Data {
+        match self {
+            ETData::Node(data) => data,
+            _ => panic!("Expected Node"),
+        }
+    }
+    fn unwrap_edge(&self) -> (&Data, &Ref) {
+        match self {
+            ETData::Edge { data, other } => (data, other),
+            _ => panic!("Expected Edge"),
         }
     }
 }
@@ -67,7 +75,7 @@ impl<Ag: AggregatedData, InRef: Clone + Debug> AggregatedData for ETAggregated<A
     type Data = ETData<Ag::Data, InRef>;
     fn from(data: &Self::Data) -> Self {
         Self {
-            data: data.data().map(Ag::from).unwrap_or_default(),
+            data: Ag::from(data.data()),
             subtree_size: matches!(data, ETData::Node(_)).into(),
             _phantom: PhantomData,
         }
@@ -117,7 +125,7 @@ where
         for i in 0..r.len() {
             write!(f, " {:?}", r.find_kth(i).node_data())?;
         }
-        write!(f, "\n")
+        Ok(())
     }
 }
 impl<BST, Ag> NodeRef<EulerTourTree<BST, Ag>>
@@ -130,7 +138,7 @@ where
     }
     /// Makes the given node the root.
     pub fn reroot(&self) {
-        EulerTourTree::reroot_raw(&self.0 .0)
+        EulerTourTree::reroot_raw(&self.0 .0);
     }
     /// BST used to store the euler tour.
     pub fn inner_bst(&self) -> Arc<BST> {
@@ -142,61 +150,37 @@ where
 
     /// Connects the two nodes with an edge. The root of the first tree remais the root. Returns None if they are already connected.
     pub fn connect(
-        &self,
-        node2: &Self,
-        edge_data: Ag::Data,
+        &self, // u
+        node_w: &Self,
+        uw_data: Ag::Data,
+        wu_data: Ag::Data,
     ) -> Option<EdgeRef<EulerTourTree<BST, Ag>>> {
-        if self.0 .0.on_same_tree(&node2.0 .0) {
+        if self.0 .0.on_same_tree(&node_w.0 .0) {
             // Already connected
             None
         } else {
-            println!("bfore reroot {:?}", node2);
-            Self::reroot(node2);
-            println!("after reroot {:?}", node2);
-            Some(EulerTourTree::link_root(self, node2, edge_data))
+            Self::reroot(node_w);
+            Some(EulerTourTree::link_root(self, node_w, uw_data, wu_data))
         }
-    }
-
-    /// Size of the current subtree of this node.
-    pub fn subtree_size(&self) -> usize {
-        let root = self.0 .0.root();
-        match self.0 .0.order().checked_sub(1) {
-            Some(k) => {
-                if let ETData::EdgeOut { in_ref, .. } = root.find_kth(k).node_data() {
-                    let in_ref = or_alg_panic(in_ref.upgrade());
-                    (in_ref.order() - k - 1 + 2) / 3
-                } else {
-                    alg_panic()
-                }
-            }
-            // It is the root
-            None => (root.len() + 2) / 3,
-        }
-    }
-
-    pub fn is_descendant_of(&self, ascendant: &Self) -> bool {
-        if !self.0 .0.on_same_tree(&ascendant.0 .0) {
-            return false;
-        }
-        let asc_subtree = ascendant.subtree_size();
-        let asc_order = ascendant.0 .0.order();
-        let desc_order = self.0 .0.order();
-        desc_order >= asc_order && desc_order < asc_order + 3 * asc_subtree - 2
     }
 
     /// For in-edges, uses the given data.
     pub fn find_element(
         &self,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
-        in_edge_data: Ag::Data,
     ) -> Arc<BST> {
         self.0 .0.find_element(|d| {
             search_strategy(SearchData {
-                current_data: d.current_data.data().unwrap_or(&in_edge_data),
+                current_data: d.current_data.data(),
                 left_agg: d.left_agg.data,
                 right_agg: d.right_agg.data,
             })
         })
+    }
+
+    /// Number of nodes in the whole tree this node is contained in.
+    pub fn tree_size(&self) -> usize {
+        (self.0 .0.root().len() + 2) / 3
     }
 }
 
@@ -215,7 +199,7 @@ where
         NodeRef<EulerTourTree<BST, Ag>>,
         NodeRef<EulerTourTree<BST, Ag>>,
     ) {
-        let (a, b, _) = EulerTourTree::disconnect_raw(&self.0 .0, Some(&self.1 .0));
+        let (a, b, _) = EulerTourTree::disconnect_raw(&self.0 .0, Some(self.1 .0.clone()));
         (NodeRef::from_bst(a), NodeRef::from_bst(b))
     }
     /// BST used to store the euler tour. Reference to the out edge.
@@ -238,70 +222,68 @@ where
         Self(bst, PhantomData)
     }
     fn reroot_raw(node: &Arc<BST>) {
-        let k = match node.order().checked_sub(1) {
-            Some(k) => k,
-            // Already the root.
-            None => return,
-        };
-        let out_edge = node.root().find_kth(k);
-        let (prev_root, new_root, in_edge) = Self::disconnect_raw(&out_edge, None);
-        println!(
-            "prev_root {:?} new_root {:?}",
-            Self::from_bst(prev_root.clone()),
-            Self::from_bst(new_root.clone())
-        );
-        // reuse even the edges so it's easier to keep references to them
-        Self::link_root_raw(&new_root, &prev_root, &out_edge, &in_edge);
+        if !node.is_first() {
+            let (bef, aft, _) = node.split(node.order()..);
+            aft.concat(&bef);
+        }
     }
     /// Adds an edge between the root of self and the root of other. Panics if they are on the same tree.
     fn link_root(
-        node1: &NodeRef<Self>, // u
-        root2: &NodeRef<Self>, // w
-        edge_data: Ag::Data,
+        node_u: &NodeRef<Self>, // u
+        root_w: &NodeRef<Self>, // w
+        uw_data: Ag::Data,
+        wu_data: Ag::Data,
     ) -> EdgeRef<Self> {
-        assert!(!node1.0 .0.on_same_tree(&root2.0 .0));
-        assert!(root2.0 .0.is_root());
-        let inp = BST::new(ETData::EdgeIn); // wu
-        let out = BST::new(ETData::EdgeOut {
-            data: edge_data,
-            in_ref: Arc::downgrade(&inp),
+        assert!(!node_u.0 .0.on_same_tree(&root_w.0 .0));
+        assert!(root_w.0 .0.is_root());
+        let wu = BST::new(ETData::Edge {
+            data: wu_data,
+            other: Weak::new(),
+        }); // wu
+        let uw = BST::new(ETData::Edge {
+            data: uw_data,
+            other: Arc::downgrade(&wu),
         }); // uw
-        Self::link_root_raw(&node1.0 .0, &root2.0 .0, &out, &inp);
-        EdgeRef::from_bst(out, inp)
-    }
-    fn link_root_raw(
-        node1: &Arc<BST>, // u
-        node2: &Arc<BST>, // w
-        out_edge: &Arc<BST>,
-        in_edge: &Arc<BST>,
-    ) {
-        // "AAA u BBB" and "w CCC" (it is root) becomes
-        // AAA u uw w CCC wu BBB
-        let (_, until_node1, after_node1) = node1.split(0..=node1.order());
-        until_node1
-            .concat(out_edge)
-            .concat(node2)
-            .concat(in_edge)
-            .concat(&after_node1);
-    }
-    /// Returns the first elements of each tree, which are the roots. And then the removed in_edge.
-    fn disconnect_raw(
-        out_edge: &Arc<BST>,
-        // hint, optional but makes it faster
-        in_edge: Option<&Arc<BST>>,
-    ) -> (Arc<BST>, Arc<BST>, Arc<BST>) {
-        let in_edge = in_edge.cloned().unwrap_or_else(|| {
-            if let ETData::EdgeOut { in_ref, .. } = out_edge.node_data() {
-                or_alg_panic(in_ref.upgrade())
+        wu.change_data(|data| {
+            if let ETData::Edge { other, .. } = data {
+                *other = Arc::downgrade(&uw);
             } else {
                 alg_panic()
             }
         });
-        let (left, middle, right) = out_edge.split(out_edge.order()..=in_edge.order());
+        Self::link_root_raw(&node_u.0 .0, &root_w.0 .0, &uw, &wu);
+        EdgeRef::from_bst(uw, wu)
+    }
+    fn link_root_raw(
+        u: &Arc<BST>, // u
+        w: &Arc<BST>, // w
+        uw: &Arc<BST>,
+        wu: &Arc<BST>,
+    ) {
+        // "AAA u BBB" and "w CCC" (it is root) becomes
+        // AAA u uw w CCC wu BBB
+        let (_, until_u, after_u) = u.split(0..=u.order());
+        until_u.concat(uw).concat(w).concat(wu).concat(&after_u);
+    }
+    /// Returns the first elements of each tree, which are the roots. And then the removed other_e.
+    fn disconnect_raw(
+        edge: &Arc<BST>,
+        // hint, optional but makes it faster
+        other_e: Option<Arc<BST>>,
+    ) -> (Arc<BST>, Arc<BST>, Arc<BST>) {
+        let other_e = other_e.unwrap_or_else(|| {
+            if let ETData::Edge { other, .. } = edge.node_data() {
+                or_alg_panic(other.upgrade())
+            } else {
+                alg_panic()
+            }
+        });
+        let (a, b) = (edge.order(), other_e.order());
+        let (left, middle, right) = edge.split(a.min(b)..=a.max(b));
         // Remove the first and last items, which is the edge which no longer exists
         let (_, middle, _) = middle.split(1..middle.len() - 1);
-        assert_eq!(out_edge.root().len(), 1);
-        assert_eq!(in_edge.root().len(), 1);
-        (left.concat(&right).first(), middle.first(), in_edge.clone())
+        assert_eq!(edge.root().len(), 1);
+        assert_eq!(other_e.root().len(), 1);
+        (left.concat(&right).first(), middle.first(), other_e)
     }
 }

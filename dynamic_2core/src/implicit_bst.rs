@@ -55,6 +55,12 @@ where
     }
     /// Position of the node in the full BST, 0-indexed. Panics if empty.
     fn order(&self) -> usize;
+    fn is_first(&self) -> bool {
+        self.order() == 0
+    }
+    fn next(&self) -> Arc<Self> {
+        self.root().find_kth(self.order() + 1)
+    }
     /// Aggregated data of the subtree.
     fn total_agg(&self) -> Ag {
         self.range_agg(..)
