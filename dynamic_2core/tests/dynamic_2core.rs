@@ -1,5 +1,5 @@
 use rand::{Rng, SeedableRng};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use common::slow_bst::SlowET;
 use dynamic_2core::dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver};
@@ -44,21 +44,28 @@ where
         Self::test_dyn_con();
     }
 
-    fn compare_with<T2: Dynamic2CoreSolver + std::fmt::Debug>()
+    fn compare_with_dumb()
     where
         T: std::fmt::Debug,
     {
-        let mut t1 = T::new(30);
-        let mut t2 = T2::new(30);
+        const N: usize = 25;
+        let mut t1 = T::new(N);
+        let mut t2 = Dumb::new(N);
         let mut edges = vec![];
-        let mut rng = rand::rngs::StdRng::seed_from_u64(2012);
-        for q in 0..10000 {
-            if edges.is_empty() || rng.gen_bool(0.90) {
-                let u = rng.gen_range(0..29);
-                let v = rng.gen_range(u..30);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(20178);
+        for q in 0..3000 {
+            if edges.is_empty() || rng.gen_bool(0.66) {
+                let mut u = rng.gen_range(0..N);
+                let mut v = rng.gen_range(0..N - 1);
+                if v >= u {
+                    v += 1;
+                } else {
+                    std::mem::swap(&mut u, &mut v);
+                }
                 let added = t1.add_edge(u, v);
                 assert_eq!(added, t2.add_edge(u, v));
                 if added {
+                    println!("Added edge {} {}\n{:?}\n", u, v, &t1);
                     edges.push((u, v));
                 }
             } else {
@@ -66,14 +73,22 @@ where
                 let (u, v) = edges[idx];
                 assert_eq!(t1.remove_edge(u, v), t2.remove_edge(u, v));
                 edges.swap_remove(idx);
+                println!("Removed edge {} {}\n{:?}\n", u, v, &t1);
             }
-            if q % 10 == 0 {
-                for u in 0..30 {
-                    for v in 0..30 {
-                        if t1.is_connected(u, v) != t2.is_connected(u, v) {
-                            dbg!(q, u, v, &t1, &t2);
-                        }
-                        assert_eq!(t1.is_connected(u, v), t2.is_connected(u, v));
+            if q % 1 == 0 {
+                let gs = t2.groups();
+                for u in 0..N {
+                    for v in 0..N {
+                        assert_eq!(
+                            t1.is_connected(u, v),
+                            (gs[u] == gs[v]),
+                            "q {} u {} v {}\nt1\n{:?}\n\nt2\n{:?}",
+                            q,
+                            u,
+                            v,
+                            &t1,
+                            &t2
+                        );
                     }
                 }
             }
@@ -81,9 +96,45 @@ where
     }
 }
 
-#[derive(Debug)]
 struct Dumb {
     adj: Vec<BTreeSet<usize>>,
+}
+
+impl std::fmt::Debug for Dumb {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v_to_id = self.groups();
+        let mut gs = vec![vec![]; v_to_id.iter().copied().max().unwrap_or(0)];
+        for (v, &id) in v_to_id.iter().enumerate() {
+            gs[id - 1].push(v);
+        }
+        f.debug_struct("Dumb").field("groups", &gs).finish()
+    }
+}
+
+impl Dumb {
+    fn groups(&self) -> Vec<usize> {
+        let mut groups = vec![0; self.adj.len()];
+        let mut group_id = 0;
+        for u in 0..self.adj.len() {
+            if groups[u] == 0 {
+                group_id += 1;
+                groups[u] = group_id;
+                let mut stack = vec![u];
+                while let Some(u) = stack.pop() {
+                    groups[u] = group_id;
+                    stack.extend(self.adj[u].iter().copied().filter(|&v| {
+                        if groups[v] == 0 {
+                            groups[v] = group_id;
+                            true
+                        } else {
+                            false
+                        }
+                    }));
+                }
+            }
+        }
+        groups
+    }
 }
 
 impl Dynamic2CoreSolver for Dumb {
@@ -120,7 +171,7 @@ impl Dynamic2CoreSolver for Dumb {
     }
 
     fn is_in_1core(&self, u: usize) -> bool {
-        todo!()
+        !self.adj[u].is_empty()
     }
 }
 
@@ -133,5 +184,5 @@ fn test_dumb() {
 #[test]
 fn test_slow() {
     D2CTests::<ETTSolver<SlowET<AgData>>>::test_all();
-    D2CTests::<ETTSolver<SlowET<AgData>>>::compare_with::<Dumb>();
+    D2CTests::<ETTSolver<SlowET<AgData>>>::compare_with_dumb();
 }

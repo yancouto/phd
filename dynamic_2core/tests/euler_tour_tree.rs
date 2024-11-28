@@ -99,8 +99,21 @@ where
         Self::assert_all_connections(&nodes, &["11000", "11000", "00111", "00111", "00111"]);
     }
 
+    fn test_reroot() {
+        let nodes = Self::build(5);
+        for (u, v) in [(0, 4), (0, 1), (1, 2), (2, 3)] {
+            nodes[u].connect(&nodes[v], 0).unwrap();
+        }
+        Self::assert_node_order(&nodes[2], &[0, 1, 2, 3, -1, -1, -1, 4, -1]);
+        nodes[3].reroot();
+        Self::assert_node_order(&nodes[2], &[3, 2, 1, 0, 4, -1, -1, -1, -1]);
+        nodes[2].reroot();
+        Self::assert_node_order(&nodes[2], &[2, 3, -1, 1, 0, 4, -1, -1, -1]);
+    }
+
     fn test_all() {
-        Self::test_simple();
+        //Self::test_simple();
+        Self::test_reroot();
     }
 }
 

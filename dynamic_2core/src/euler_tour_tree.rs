@@ -21,8 +21,10 @@ impl<Data: std::fmt::Debug, InRef> std::fmt::Debug for ETData<Data, InRef> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ETData::Node(data) => write!(f, "Node({:?})", data),
-            ETData::EdgeOut { data, .. } => write!(f, "EdgeOut({:?})", data),
-            ETData::EdgeIn => write!(f, "EdgeIn"),
+            //ETData::EdgeOut { data, .. } => write!(f, "EdgeOut({:?})", data),
+            //ETData::EdgeIn => write!(f, "EdgeIn"),
+            ETData::EdgeOut { data, .. } => write!(f, ">"),
+            ETData::EdgeIn => write!(f, "<"),
         }
     }
 }
@@ -148,7 +150,9 @@ where
             // Already connected
             None
         } else {
+            println!("bfore reroot {:?}", node2);
             Self::reroot(node2);
+            println!("after reroot {:?}", node2);
             Some(EulerTourTree::link_root(self, node2, edge_data))
         }
     }
@@ -241,6 +245,11 @@ where
         };
         let out_edge = node.root().find_kth(k);
         let (prev_root, new_root, in_edge) = Self::disconnect_raw(&out_edge, None);
+        println!(
+            "prev_root {:?} new_root {:?}",
+            Self::from_bst(prev_root.clone()),
+            Self::from_bst(new_root.clone())
+        );
         // reuse even the edges so it's easier to keep references to them
         Self::link_root_raw(&new_root, &prev_root, &out_edge, &in_edge);
     }
@@ -278,6 +287,7 @@ where
     /// Returns the first elements of each tree, which are the roots. And then the removed in_edge.
     fn disconnect_raw(
         out_edge: &Arc<BST>,
+        // hint, optional but makes it faster
         in_edge: Option<&Arc<BST>>,
     ) -> (Arc<BST>, Arc<BST>, Arc<BST>) {
         let in_edge = in_edge.cloned().unwrap_or_else(|| {

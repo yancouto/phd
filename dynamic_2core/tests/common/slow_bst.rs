@@ -18,6 +18,7 @@ pub struct SlowBst<Ag: AggregatedData> {
 #[derive(Clone, Debug)]
 pub struct GroupEntry<Ag: AggregatedData> {
     node_idx: usize,
+    arc: Arc<SlowBst<Ag>>,
     node_data: Ag::Data,
 }
 
@@ -32,23 +33,35 @@ pub trait SlowBstData: AggregatedData + 'static {
 impl<Ag: SlowBstData> SlowBst<Ag> {
     // node id to group id
 
-    fn from(idx: usize) -> Arc<Self> {
+    fn create(idx: usize) -> Arc<Self> {
         Arc::new(SlowBst {
             node_idx: idx,
             _phantom: PhantomData,
         })
     }
 
+    fn find(idx: usize) -> Arc<Self> {
+        Ag::map().read().unwrap()[idx]
+            .read()
+            .unwrap()
+            .0
+            .iter()
+            .find(|x| x.node_idx == idx)
+            .unwrap()
+            .arc
+            .clone()
+    }
+
     fn group(&self) -> Arc<RwLock<Group<Ag>>> {
         Ag::map().read().unwrap()[self.node_idx].clone()
     }
-    fn group_entry_idx(&self, idx: usize) -> usize {
+    fn group_entry_idx(&self, idx: usize) -> Arc<Self> {
         Ag::map().read().unwrap()[self.node_idx]
             .read()
             .unwrap()
             .0
             .get(idx)
-            .map_or(usize::MAX, |d| d.node_idx)
+            .map_or_else(Self::new_empty, |d| d.arc.clone())
     }
     fn map_len() -> usize {
         Ag::map().read().unwrap().len()
@@ -57,13 +70,14 @@ impl<Ag: SlowBstData> SlowBst<Ag> {
 
 impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
     fn new_empty() -> Arc<Self> {
-        SlowBst::from(usize::MAX)
+        SlowBst::create(usize::MAX)
     }
 
     fn new(data: Ag::Data) -> Arc<Self> {
-        let node = SlowBst::from(Self::map_len());
+        let node = SlowBst::create(Self::map_len());
         let g = Group(vec![GroupEntry {
             node_idx: node.node_idx,
+            arc: node.clone(),
             node_data: data,
         }]);
         Ag::map().write().unwrap().push(Arc::new(RwLock::new(g)));
@@ -77,21 +91,23 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
             .enumerate()
             .map(|(i, d)| GroupEntry {
                 node_idx: cur + i,
+                arc: SlowBst::create(cur + i),
                 node_data: d,
             })
             .collect::<Vec<_>>();
+        let nodes = entries.iter().map(|e| e.arc.clone()).collect::<Vec<_>>();
         let added = entries.len();
         let g = Arc::new(RwLock::new(Group(entries)));
         Ag::map()
             .write()
             .unwrap()
             .extend(std::iter::repeat(g).take(added));
-        (cur..cur + added).map(SlowBst::from)
+        nodes.into_iter()
     }
 
     fn root(&self) -> Arc<Self> {
         let root_idx = self.group_entry_idx(0);
-        SlowBst::from(root_idx)
+        root_idx
     }
 
     fn node_data(&self) -> &Ag::Data {
@@ -129,7 +145,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
     fn find_kth(&self, k: usize) -> Arc<Self> {
         let cur_k = self.order();
         let the_idx = self.group_entry_idx(cur_k + k);
-        SlowBst::from(the_idx)
+        the_idx
     }
 
     fn len(&self) -> usize {
@@ -149,15 +165,15 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
 
     fn concat(&self, other: &Self) -> Arc<Self> {
         if self.is_empty() {
-            return Self::from(other.node_idx);
+            return Self::find(other.node_idx);
         } else if other.is_empty() {
-            return Self::from(self.node_idx);
+            return Self::find(self.node_idx);
         }
         let g1 = self.group();
         let g2 = other.group();
         assert!(!Arc::ptr_eq(&g1, &g2));
         g1.write().unwrap().0.append(&mut g2.write().unwrap().0);
-        let root = SlowBst::from(g1.read().unwrap().0[0].node_idx);
+        let root = g1.read().unwrap().0[0].arc.clone();
         Ag::map().write().unwrap().iter_mut().for_each(|g| {
             if Arc::ptr_eq(g, &g2) {
                 *g = g1.clone();
@@ -185,9 +201,13 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
             }
         }
         let ret = (
-            SlowBst::from(left.first().map_or(usize::MAX, |n| n.node_idx)),
-            SlowBst::from(middle.first().map_or(usize::MAX, |n| n.node_idx)),
-            SlowBst::from(right.first().map_or(usize::MAX, |n| n.node_idx)),
+            left.first().map_or_else(Self::new_empty, |n| n.arc.clone()),
+            middle
+                .first()
+                .map_or_else(Self::new_empty, |n| n.arc.clone()),
+            right
+                .first()
+                .map_or_else(Self::new_empty, |n| n.arc.clone()),
         );
         g.0.append(&mut middle);
         let gl = Arc::new(RwLock::new(Group(left.clone())));
@@ -218,7 +238,7 @@ impl<Ag: SlowBstData> ImplicitBST<Ag> for SlowBst<Ag> {
                 left_agg: left_agg.clone(),
                 right_agg: self.range_agg(i + 1..),
             }) {
-                Found => return Self::from(data.node_idx),
+                Found => return data.arc.clone(),
                 NotFound | Left => return Self::new_empty(),
                 Right => {}
             }
