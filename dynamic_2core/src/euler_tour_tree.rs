@@ -20,9 +20,8 @@ impl<Data: std::fmt::Debug, InRef> std::fmt::Debug for ETData<Data, InRef> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ETData::Node(data) => write!(f, "Node({:?})", data),
-            //ETData::EdgeOut { data, .. } => write!(f, "EdgeOut({:?})", data),
-            //ETData::EdgeIn => write!(f, "EdgeIn"),
-            ETData::Edge { .. } => write!(f, "."),
+            ETData::Edge { data, .. } => write!(f, ".{:?}.", data),
+            //ETData::Edge { .. } => write!(f, "."),
         }
     }
 }

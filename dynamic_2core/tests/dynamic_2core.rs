@@ -54,6 +54,12 @@ where
         let mut edges = vec![];
         let mut rng = rand::rngs::StdRng::seed_from_u64(20178);
         for q in 0..3000 {
+            if q % 100 == 0 || q == 1562 || q >= 163 {
+                println!("q {}", q);
+            }
+            if q == 1562 || q == 163 {
+                t1.is_in_1core(0);
+            }
             if edges.is_empty() || rng.gen_bool(0.66) {
                 let mut u = rng.gen_range(0..N);
                 let mut v = rng.gen_range(0..N - 1);
