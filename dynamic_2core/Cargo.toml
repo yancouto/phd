@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+log = "0.4"
 
 [dev-dependencies]
+flexi_logger = { version = "0.29", default_features = false, features = [
+    "colors",
+] }
 rand = "0.8"

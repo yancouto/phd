@@ -1,7 +1,6 @@
 use std::{
-    assert_matches::assert_matches,
     collections::{BTreeMap, BTreeSet},
-    sync::{atomic::AtomicBool, Arc, Weak},
+    sync::{Arc, Weak},
 };
 
 use crate::{
@@ -143,7 +142,6 @@ where
     e_to_id: BTreeMap<(Node, Node), usize>,
     /// Only exists for extra edges
     u_level_to_extras: BTreeMap<(Node, Level), BTreeSet<EdgeId>>,
-    full_debug: AtomicBool,
 }
 
 impl<BST> std::fmt::Debug for ETTSolver<BST>
@@ -170,9 +168,6 @@ impl<BST> ETTSolver<BST>
 where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
-    fn full_debug(&self) -> bool {
-        self.full_debug.load(std::sync::atomic::Ordering::Relaxed)
-    }
     fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, edges: bool) -> std::fmt::Result {
         let mut db = f.debug_struct("ETTSolver");
         let mut roots: Vec<Arc<BST>> = vec![];
@@ -240,11 +235,9 @@ where
         node: &NodeRef<EulerTourTree<BST, AgData>>,
     ) -> Option<EdgeId> {
         assert!(node.inner_bst().is_root());
-        // println!("Looking for tree edge at level {}", i);
+        // log::trace!("Looking for tree edge at level {}", i);
         let found = node.find_element(|d| {
-            if self.full_debug() {
-                println!("Checking {:?}", d);
-            }
+            // log::trace!("Checking {:?}", d);
             if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
                 // println!("edge level {}", d.current_data.unwrap_edge().1);
                 SearchDirection::Found
@@ -258,7 +251,7 @@ where
         });
         if !found.is_empty() {
             let (id, _) = found.node_data().data().unwrap_edge();
-            // println!("Found edge {} at level {}", id, i);
+            // log::trace!("Found edge {} at level {}", id, i);
             self.assert_data(&found, i);
             return Some(id);
         }
@@ -393,7 +386,6 @@ where
             edge_info: Vec::new(),
             e_to_id: BTreeMap::new(),
             u_level_to_extras: BTreeMap::new(),
-            full_debug: AtomicBool::new(false),
         }
     }
 
@@ -428,28 +420,25 @@ where
         };
         self.rem_edge_id(e_id);
         if let Some(levels) = self.edge_info[e_id].levels.take() {
-            if self.full_debug() {
-                println!(
-                    "Removing edge {} = ({}, {}) at level {}",
-                    e_id, u, v, self.edge_info[e_id].level
-                );
-            }
+            log::trace!(
+                "Removing edge {} = ({}, {}) at level {}",
+                e_id,
+                u,
+                v,
+                self.edge_info[e_id].level
+            );
             let smallest_comp: Vec<_> = levels
                 .iter()
                 .enumerate()
                 .map(|(lvl, e)| {
                     assert!(self.levels[lvl][u].is_connected(&self.levels[lvl][v]));
-                    if self.full_debug() {
-                        println!("[lvl {}] before: {:?}", lvl, Dbg(self as &_, lvl, false));
-                    }
+                    log::trace!("[lvl {}] before: {:?}", lvl, Dbg(self as &_, lvl, false));
                     let (tu, tv) = e.disconnect();
                     self.assert_data(&tu.inner_bst(), lvl);
                     self.assert_data(&tv.inner_bst(), lvl);
                     assert!(!tu.is_connected(&tv));
                     assert!(!self.levels[lvl][u].is_connected(&self.levels[lvl][v]));
-                    if self.full_debug() {
-                        println!("[lvl {}] after: {:?}", lvl, Dbg(self as &_, lvl, false));
-                    }
+                    log::trace!("[lvl {}] after: {:?}", lvl, Dbg(self as &_, lvl, false));
                     if tu.tree_size() < tv.tree_size() {
                         tu
                     } else {
@@ -459,31 +448,24 @@ where
                 .collect();
 
             for (i, small) in smallest_comp.into_iter().enumerate().rev() {
-                if self.full_debug() {
-                    println!("Looking for edge at level {}: smol {:?}", i, &small);
-                }
+                log::trace!("Looking for edge at level {}: smol {:?}", i, &small);
                 // Move all tree edges of level i to i + 1
                 while let Some(f_id) = self.find_level_i_tree_edge(i, &small) {
                     assert!(!self.edge_info[f_id].is_extra(), "tree edge is extra");
                     assert_eq!(self.edge_info[f_id].level, i, "edge has wrong level");
-                    if self.full_debug() {
-                        println!(
-                            "Tree edge {:?} at level {} will move",
-                            self.edge_info[f_id].e, i
-                        );
-                    }
+                    log::trace!(
+                        "Tree edge {:?} at level {} will move",
+                        self.edge_info[f_id].e,
+                        i
+                    );
                     self.add_level_to_edge(f_id);
                 }
-                if self.full_debug() {
-                    println!("After tree edges pushed, smol: {:?}", &small);
-                }
+                log::trace!("After tree edges pushed, smol: {:?}", &small);
                 // For all extra edges of level i, check if they replace the removed edge, and move them to level i + 1
                 while let Some(f_id) = self.find_level_i_extra_edge(i, &small) {
                     let (a, b) = self.edge_info[f_id].e;
                     if !self.levels[i][a].is_connected(&self.levels[i][b]) {
-                        if self.full_debug() {
-                            println!("Extra edge ({}, {}) at level {} will replace", a, b, i);
-                        }
+                        log::trace!("Extra edge ({}, {}) at level {} will replace", a, b, i);
                         self.rem_edge_id(f_id);
                         let mut rs = vec![];
                         // This is a replacement edge, add it to the tree in this and previous levels, then exit.
@@ -504,9 +486,7 @@ where
                             let r = self.levels[j][a]
                                 .connect(&self.levels[j][b], e.clone(), e.clone())
                                 .expect("shouldn't be connected at previous level");
-                            if self.full_debug() {
-                                println!("[lvl {}] after: {:?}", j, Dbg(self as &_, j, false));
-                            }
+                            log::trace!("[lvl {}] after: {:?}", j, Dbg(self as &_, j, false));
                             assert!(self.levels[j][a].is_connected(&self.levels[j][b]));
                             assert!(
                                 self.levels[j][u].is_connected(&self.levels[j][v]),
@@ -523,9 +503,7 @@ where
                         self.add_edge_id(f_id);
                         return true;
                     }
-                    if self.full_debug() {
-                        println!("Extra edge ({}, {}) at level {} will move", a, b, i);
-                    }
+                    log::trace!("Extra edge ({}, {}) at level {} will move", a, b, i);
                     self.add_level_to_edge(f_id);
                 }
             }
@@ -543,8 +521,6 @@ where
     }
 
     fn is_in_1core(&self, u: usize) -> bool {
-        self.full_debug
-            .store(true, std::sync::atomic::Ordering::Relaxed);
         let u = &self.levels[0][u];
         // Definitely can be more efficient, O(1), but this works
         u.tree_size() > 1

@@ -1,7 +1,7 @@
 use rand::{Rng, SeedableRng};
 use std::collections::BTreeSet;
 
-use common::slow_bst::SlowET;
+use common::{init_logger, slow_bst::SlowET, LOGGER};
 use dynamic_2core::dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver};
 
 mod common;
@@ -58,7 +58,11 @@ where
                 println!("q {}", q);
             }
             if q == 1562 || q == 163 {
-                t1.is_in_1core(0);
+                LOGGER
+                    .lock()
+                    .unwrap()
+                    .parse_and_push_temp_spec("trace")
+                    .unwrap();
             }
             if edges.is_empty() || rng.gen_bool(0.66) {
                 let mut u = rng.gen_range(0..N);
@@ -189,6 +193,7 @@ fn test_dumb() {
 // Can't run these in parallel because we used ugly globals.
 #[test]
 fn test_slow() {
+    init_logger();
     D2CTests::<ETTSolver<SlowET<AgData>>>::test_all();
     D2CTests::<ETTSolver<SlowET<AgData>>>::compare_with_dumb();
 }
