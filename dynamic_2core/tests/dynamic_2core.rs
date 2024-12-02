@@ -177,7 +177,23 @@ impl Dynamic2CoreSolver for Dumb {
     }
 
     fn is_in_2core(&self, u: usize) -> bool {
-        todo!()
+        let mut new_adj = self.adj.clone();
+        let mut to_rem: Vec<_> = (0..self.adj.len())
+            .filter(|&v| self.adj[v].len() <= 1)
+            .collect();
+        let mut seen = BTreeSet::from_iter(to_rem.iter().copied());
+        while let Some(v) = to_rem.pop() {
+            if v == u {
+                return false;
+            }
+            for w in new_adj[v].clone() {
+                new_adj[w].remove(&v);
+                if new_adj[w].len() <= 1 && seen.insert(w) {
+                    to_rem.push(w);
+                }
+            }
+        }
+        true
     }
 
     fn is_in_1core(&self, u: usize) -> bool {

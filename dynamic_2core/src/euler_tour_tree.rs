@@ -39,12 +39,14 @@ impl<Data, Ref> ETData<Data, Ref> {
             ETData::Edge { data, .. } => data,
         }
     }
+    #[allow(dead_code)]
     fn unwrap_node(&self) -> &Data {
         match self {
             ETData::Node(data) => data,
             _ => panic!("Expected Node"),
         }
     }
+    #[allow(dead_code)]
     fn unwrap_edge(&self) -> (&Data, &Ref) {
         match self {
             ETData::Edge { data, other } => (data, other),
@@ -113,6 +115,30 @@ fn or_alg_panic<T>(opt: Option<T>) -> T {
     opt.expect("EulerTourTree algorithm incorrect")
 }
 
+impl<BST, Ag> EulerTourTree<BST, Ag>
+where
+    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    Ag: AggregatedData,
+{
+    pub fn deb_ord(node: &Arc<BST>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    where
+        Ag::Data: Ord,
+    {
+        let r = node.root();
+        let mut all_data: Vec<_> = (0..r.len())
+            .filter_map(|i| match r.find_kth(i).node_data() {
+                ETData::Node(d) => Some(d),
+                _ => None,
+            })
+            .collect();
+        all_data.sort();
+        for d in all_data {
+            write!(f, " {:?}", d)?;
+        }
+        Ok(())
+    }
+}
+
 impl<BST, Ag> std::fmt::Debug for EulerTourTree<BST, Ag>
 where
     BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
@@ -120,9 +146,16 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let r = self.0.root();
-        write!(f, "Euler tour:")?;
+        // write!(f, "Euler tour:")?;
+        // for i in 0..r.len() {
+        //     write!(f, " {:?}", r.find_kth(i).node_data())?;
+        // }
+        write!(f, "Nodes: ")?;
         for i in 0..r.len() {
-            write!(f, " {:?}", r.find_kth(i).node_data())?;
+            match r.find_kth(i).node_data() {
+                ETData::Node(d) => write!(f, "{:?} ", d)?,
+                _ => {}
+            }
         }
         Ok(())
     }

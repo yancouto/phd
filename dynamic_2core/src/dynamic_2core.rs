@@ -26,7 +26,7 @@ pub trait Dynamic2CoreSolver {
 type Level = usize;
 type Node = usize;
 type EdgeId = usize;
-#[derive(Clone)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Data {
     Node {
         idx: Node,
@@ -47,7 +47,7 @@ impl std::fmt::Debug for Data {
                 extra_edges: _,
                 idx,
             } => write!(f, "({})", idx),
-            Data::Edge { level, e_id } => write!(f, "l{}", level),
+            Data::Edge { level, e_id: _ } => write!(f, "l{}", level),
         }
     }
 }
@@ -149,11 +149,20 @@ where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.dbg(f, 0, true)
+        self.dbg(f, 0, AllEdges)
     }
 }
 
-struct Dbg<T>(T, Level, bool);
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum DbgMode {
+    NoEdges,
+    AllEdges,
+    TreeEdges,
+}
+use log::info;
+use DbgMode::*;
+
+struct Dbg<T>(T, Level, DbgMode);
 
 impl<BST> std::fmt::Debug for Dbg<&ETTSolver<BST>>
 where
@@ -168,23 +177,50 @@ impl<BST> ETTSolver<BST>
 where
     BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
 {
-    fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, edges: bool) -> std::fmt::Result {
-        let mut db = f.debug_struct("ETTSolver");
+    fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, mode: DbgMode) -> std::fmt::Result {
         let mut roots: Vec<Arc<BST>> = vec![];
+        write!(f, "ETTSolver Level {}:", i)?;
         for (u, x) in self.levels[i].iter().enumerate() {
             let root = x.inner_bst().root();
             if roots.iter().find(|r| r.same_node(&root)).is_none() {
-                if root.len() > 1 {
-                    db.field(&format!("Level {} u {}", i, u), x);
+                if root.len() >= 1 {
+                    write!(f, " [")?;
+                    EulerTourTree::deb_ord(&root, f)?;
+                    write!(f, "]")?;
                 }
                 roots.push(root);
+                write!(f, " - {:?}", x)?;
             }
         }
-        if edges {
-            db.field("all_edges", &self.e_to_id.keys());
+        if mode != NoEdges {
+            write!(f, ", edges:\n")?;
+            let mut es = self
+                .e_to_id
+                .iter()
+                .filter_map(|((u, v), e_id)| {
+                    let info = &self.edge_info[*e_id];
+                    if mode == TreeEdges && info.is_extra() {
+                        None
+                    } else {
+                        Some((*u, *v, info.level, !info.is_extra()))
+                    }
+                })
+                .collect::<Vec<_>>();
+            es.sort_by_key(|(_, _, l, is_t)| (*l, !is_t));
+            for (u, v, l, is_tree) in es {
+                write!(
+                    f,
+                    "{} {} {}{}\n",
+                    u,
+                    v,
+                    if is_tree && mode == AllEdges { "T" } else { "" },
+                    l
+                )?;
+            }
         }
-        db.finish()
+        Ok(())
     }
+
     fn assert_extra(&self, e_id: EdgeId, lvl: Level) {
         let ((u, v), e_lvl) = self.edge(e_id);
         assert!(self.edge_info[e_id].is_extra(), "edge is not extra");
@@ -212,7 +248,7 @@ where
                         .get(&(idx, lvl))
                         .map_or(0, BTreeSet::len),
                     extra_edges,
-                    "wrong extra edge count"
+                    "wrong extra edge count for {idx} at l{lvl}"
                 );
             }
             Edge {
@@ -289,6 +325,9 @@ where
         self.levels[lvl][u].inner_bst().change_data(|d| {
             if let Data::Node { extra_edges, .. } = d.data_mut() {
                 f(extra_edges);
+                if u == 10 {
+                    info!("{u}.extra_edges = {extra_edges}");
+                }
             } else {
                 panic!("Algorithm error: found a node that is not a node");
             }
@@ -299,13 +338,25 @@ where
         let ((u, v), lvl) = self.edge(e_id);
         assert!(self.e_to_id.insert((u, v), e_id).is_none());
         if self.edge_info[e_id].is_extra() {
-            for u in [u, v] {
+            for w in [u, v] {
                 assert!(self
                     .u_level_to_extras
-                    .entry((u, lvl))
+                    .entry((w, lvl))
                     .or_default()
                     .insert(e_id));
-                self.mod_extra_edges(u, lvl, |extra_edges| *extra_edges += 1);
+                self.mod_extra_edges(w, lvl, |extra_edges| *extra_edges += 1);
+                if w == 10 {
+                    log::info!(
+                        "[l{lvl}] adding edge {e_id} ({u}, {v}) to {w} ({} == {:?})",
+                        self.levels[lvl][w]
+                            .inner_bst()
+                            .node_data()
+                            .data()
+                            .unwrap_node()
+                            .1,
+                        self.u_level_to_extras[&(w, lvl)],
+                    );
+                }
             }
             self.assert_extra(e_id, lvl);
         }
@@ -314,14 +365,26 @@ where
     fn rem_edge_id(&mut self, e_id: EdgeId) {
         let ((u, v), lvl) = self.edge(e_id);
         assert!(self.e_to_id.remove(&self.edge_info[e_id].e).is_some());
-        for u in [u, v] {
-            if self.edge_info[e_id].is_extra() {
+        if self.edge_info[e_id].is_extra() {
+            for w in [u, v] {
                 assert!(self
                     .u_level_to_extras
-                    .get_mut(&(u, lvl))
+                    .get_mut(&(w, lvl))
                     .unwrap()
                     .remove(&e_id));
-                self.mod_extra_edges(u, lvl, |extra_edges| *extra_edges -= 1);
+                self.mod_extra_edges(w, lvl, |extra_edges| *extra_edges -= 1);
+                if w == 10 {
+                    log::info!(
+                        "[l{lvl}] removing edge {e_id} ({u}, {v}) from {w} ({} == {:?})",
+                        self.levels[lvl][w]
+                            .inner_bst()
+                            .node_data()
+                            .data()
+                            .unwrap_node()
+                            .1,
+                        self.u_level_to_extras[&(w, lvl)],
+                    );
+                }
             }
         }
     }
@@ -418,10 +481,9 @@ where
         } else {
             return false;
         };
-        self.rem_edge_id(e_id);
-        if let Some(levels) = self.edge_info[e_id].levels.take() {
+        if let Some(levels) = self.edge_info[e_id].levels.as_ref() {
             log::trace!(
-                "Removing edge {} = ({}, {}) at level {}",
+                "Removing tree edge {} = ({}, {}) at level {}",
                 e_id,
                 u,
                 v,
@@ -431,14 +493,24 @@ where
                 .iter()
                 .enumerate()
                 .map(|(lvl, e)| {
+                    log::trace!(
+                        "[lvl {lvl}] e {:?} before: {:?} b {:?}",
+                        e.inner_bst()[0].node_data(),
+                        Dbg(self as &_, lvl, AllEdges),
+                        e
+                    );
                     assert!(self.levels[lvl][u].is_connected(&self.levels[lvl][v]));
-                    log::trace!("[lvl {}] before: {:?}", lvl, Dbg(self as &_, lvl, false));
                     let (tu, tv) = e.disconnect();
-                    self.assert_data(&tu.inner_bst(), lvl);
-                    self.assert_data(&tv.inner_bst(), lvl);
+                    log::trace!(
+                        "[lvl {lvl}] after: {:?} u {:?} v {:?}",
+                        Dbg(self as &_, lvl, NoEdges),
+                        tu,
+                        tv
+                    );
                     assert!(!tu.is_connected(&tv));
                     assert!(!self.levels[lvl][u].is_connected(&self.levels[lvl][v]));
-                    log::trace!("[lvl {}] after: {:?}", lvl, Dbg(self as &_, lvl, false));
+                    self.assert_data(&tu.inner_bst(), lvl);
+                    self.assert_data(&tv.inner_bst(), lvl);
                     if tu.tree_size() < tv.tree_size() {
                         tu
                     } else {
@@ -446,6 +518,7 @@ where
                     }
                 })
                 .collect();
+            self.rem_edge_id(e_id);
 
             for (i, small) in smallest_comp.into_iter().enumerate().rev() {
                 log::trace!("Looking for edge at level {}: smol {:?}", i, &small);
@@ -486,7 +559,7 @@ where
                             let r = self.levels[j][a]
                                 .connect(&self.levels[j][b], e.clone(), e.clone())
                                 .expect("shouldn't be connected at previous level");
-                            log::trace!("[lvl {}] after: {:?}", j, Dbg(self as &_, j, false));
+                            log::trace!("[lvl {}] after: {:?}", j, Dbg(self as &_, j, NoEdges));
                             assert!(self.levels[j][a].is_connected(&self.levels[j][b]));
                             assert!(
                                 self.levels[j][u].is_connected(&self.levels[j][v]),
@@ -494,7 +567,7 @@ where
                                 u,
                                 v,
                                 j,
-                                Dbg(self as &_, j, true),
+                                Dbg(self as &_, j, AllEdges),
                             );
                             rs.push(r);
                         }
@@ -507,6 +580,8 @@ where
                     self.add_level_to_edge(f_id);
                 }
             }
+        } else {
+            self.rem_edge_id(e_id);
         }
         // TODO swap with last to save space. May be tricky to keep all indices
         true
