@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::implicit_bst::{AggregatedData, ImplicitBST, SearchData, SearchDirection};
+use crate::implicit_bst::{AggregatedData, Lists, SearchData, SearchDirection};
 
 #[derive(Clone)]
 pub enum ETData<Data, Ref> {
@@ -104,7 +104,7 @@ impl<N> AsRef<N> for NodeRef<N> {
 #[derive(Clone)]
 pub struct EulerTourTree<BST, Ag>(Arc<BST>, PhantomData<Ag>)
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData;
 
 fn alg_panic() -> ! {
@@ -117,7 +117,7 @@ fn or_alg_panic<T>(opt: Option<T>) -> T {
 
 impl<BST, Ag> EulerTourTree<BST, Ag>
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     pub fn deb_ord(node: &Arc<BST>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -141,7 +141,7 @@ where
 
 impl<BST, Ag> std::fmt::Debug for EulerTourTree<BST, Ag>
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -162,7 +162,7 @@ where
 }
 impl<BST, Ag> NodeRef<EulerTourTree<BST, Ag>>
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     fn from_bst(bst: Arc<BST>) -> Self {
@@ -218,7 +218,7 @@ where
 
 impl<BST, Ag> EdgeRef<EulerTourTree<BST, Ag>>
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     fn from_bst(out: Arc<BST>, inp: Arc<BST>) -> Self {
@@ -242,7 +242,7 @@ where
 
 impl<BST, Ag> EulerTourTree<BST, Ag>
 where
-    BST: ImplicitBST<ETAggregated<Ag, Weak<BST>>>,
+    BST: Lists<ETAggregated<Ag, Weak<BST>>>,
     Ag: AggregatedData,
 {
     /// Creates a new EulerTourTree with a single node.

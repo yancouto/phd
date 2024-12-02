@@ -1,10 +1,9 @@
-use std::sync::{Arc, LazyLock, Mutex, RwLock};
+use std::sync::{LazyLock, Mutex};
 
-use dynamic_2core::implicit_bst::AggregatedData;
+use dynamic_2core::lists::AggregatedData;
 use flexi_logger::{Logger, LoggerHandle};
-use slow_bst::{Group, SlowBstData};
 
-pub mod slow_bst;
+pub mod slow_lists;
 
 #[derive(Debug, Clone, Default)]
 pub struct AggSum(pub i32);
@@ -18,14 +17,6 @@ impl AggregatedData for AggSum {
 
     fn merge(self, right: Self) -> Self {
         Self(self.0 + right.0)
-    }
-}
-
-static GROUPS: RwLock<Vec<Arc<RwLock<Group<AggSum>>>>> = RwLock::new(vec![]);
-
-impl SlowBstData for AggSum {
-    fn map() -> &'static RwLock<Vec<Arc<RwLock<Group<AggSum>>>>> {
-        &GROUPS
     }
 }
 

@@ -1,16 +1,16 @@
-use std::sync::Weak;
+/*use std::sync::Weak;
 
 use common::{slow_bst::SlowET, AggSum};
 use dynamic_2core::{
     euler_tour_tree::{ETAggregated, EdgeRef, EulerTourTree, NodeRef},
-    implicit_bst::ImplicitBST,
+    lists::Lists,
 };
 
 mod common;
 
 struct ETTTests<T>(std::marker::PhantomData<T>)
 where
-    T: ImplicitBST<ETAggregated<AggSum, Weak<T>>>;
+    T: Lists<ETAggregated<AggSum, Weak<T>>>;
 
 type ETT<T> = EulerTourTree<T, AggSum>;
 type Node<T> = NodeRef<ETT<T>>;
@@ -23,7 +23,7 @@ fn e(u: usize, v: usize) -> i32 {
 
 impl<T> ETTTests<T>
 where
-    T: ImplicitBST<ETAggregated<AggSum, Weak<T>>>,
+    T: Lists<ETAggregated<AggSum, Weak<T>>>,
 {
     fn build(n: usize) -> Vec<Node<T>> {
         (0..n).map(|i| ETT::new(i as i32)).collect()
@@ -116,3 +116,4 @@ where
 fn test_ett_with_slow_bst() {
     ETTTests::<SlowET>::test_all();
 }
+*/

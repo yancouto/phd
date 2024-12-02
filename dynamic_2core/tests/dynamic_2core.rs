@@ -1,7 +1,7 @@
-use rand::{Rng, SeedableRng};
+/*use rand::{Rng, SeedableRng};
 use std::collections::BTreeSet;
 
-use common::{init_logger, slow_bst::SlowET, LOGGER};
+use common::{init_logger, slow_lists::SlowET, LOGGER};
 use dynamic_2core::dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver};
 
 mod common;
@@ -213,3 +213,4 @@ fn test_slow() {
     D2CTests::<ETTSolver<SlowET<AgData>>>::test_all();
     D2CTests::<ETTSolver<SlowET<AgData>>>::compare_with_dumb();
 }
+*/

@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     euler_tour_tree::{ETAggregated, ETData, EdgeRef, EulerTourTree, NodeRef},
-    implicit_bst::{AggregatedData, ImplicitBST, SearchDirection},
+    implicit_bst::{AggregatedData, Lists, SearchDirection},
 };
 
 pub trait Dynamic2CoreSolver {
@@ -112,7 +112,7 @@ impl AggregatedData for AgData {
 #[derive(Debug)]
 struct EdgeInfo<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     /// u < v
     e: (Node, Node),
@@ -124,7 +124,7 @@ where
 
 impl<BST> EdgeInfo<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     fn is_extra(&self) -> bool {
         self.levels.is_none()
@@ -133,7 +133,7 @@ where
 
 pub struct ETTSolver<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     // lg levels
     levels: Vec<Vec<NodeRef<EulerTourTree<BST, AgData>>>>,
@@ -146,7 +146,7 @@ where
 
 impl<BST> std::fmt::Debug for ETTSolver<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.dbg(f, 0, AllEdges)
@@ -166,7 +166,7 @@ struct Dbg<T>(T, Level, DbgMode);
 
 impl<BST> std::fmt::Debug for Dbg<&ETTSolver<BST>>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.dbg(f, self.1, self.2)
@@ -175,7 +175,7 @@ where
 
 impl<BST> ETTSolver<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, mode: DbgMode) -> std::fmt::Result {
         let mut roots: Vec<Arc<BST>> = vec![];
@@ -428,7 +428,7 @@ where
 
 impl<BST> Dynamic2CoreSolver for ETTSolver<BST>
 where
-    BST: ImplicitBST<ETAggregated<AgData, Weak<BST>>>,
+    BST: Lists<ETAggregated<AgData, Weak<BST>>>,
 {
     fn new(n: usize) -> Self {
         // TODO: Change to +1
