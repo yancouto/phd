@@ -109,6 +109,13 @@ where
 
     /// Concats the lists containing u and v. Returns the new root.
     fn concat(&mut self, u: Idx, v: Idx) -> Idx;
+    fn concat_all(&mut self, all: impl IntoIterator<Item = Idx>) -> Idx {
+        let mut u = Self::EMPTY;
+        for v in all {
+            u = self.concat(u, v);
+        }
+        u
+    }
     /// Splits the list containing u with the given range from the left and right parts. Returns (left, range, right), which may be EMPTY.
     fn split(&mut self, u: Idx, range: impl RangeBounds<usize>) -> (Idx, Idx, Idx);
 }

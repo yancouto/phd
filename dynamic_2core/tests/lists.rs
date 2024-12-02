@@ -166,6 +166,6 @@ impl<L: Lists<AggSum>> BSTTests<L> {
 }
 
 #[test]
-fn test_slow_bst() {
+fn test_slow_lists() {
     BSTTests::<SlowLists<AggSum>>::test_all();
 }
