@@ -1,4 +1,6 @@
-use rand::{Rng, SeedableRng};
+#![feature(test)]
+extern crate test;
+use rand::{thread_rng, Rng, SeedableRng};
 use std::collections::BTreeSet;
 
 use common::{init_logger, slow_lists::SlowLists};
@@ -219,4 +221,29 @@ fn test_cmp2() {
 #[test]
 fn test_cmp3() {
     D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(3);
+}
+
+fn stress() {
+    init_logger();
+    loop {
+        let seed: u64 = thread_rng().gen();
+        log::info!("seed = {seed}");
+        D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(seed);
+    }
+}
+
+#[test]
+#[ignore]
+fn test_stress() {
+    stress()
+}
+
+#[bench]
+fn test_stress0(b: &mut test::Bencher) {
+    init_logger();
+    b.iter(|| {
+        let seed: u64 = thread_rng().gen();
+        log::info!("seed = {seed}");
+        D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(seed);
+    })
 }
