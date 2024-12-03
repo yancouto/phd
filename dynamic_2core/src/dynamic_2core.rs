@@ -15,7 +15,7 @@ pub trait Dynamic2CoreSolver {
     /// Check if u and v are connected.
     fn is_connected(&self, u: usize, v: usize) -> bool;
     /// Check if u is in the 2-core.
-    fn is_in_2core(&self, u: usize) -> bool;
+    fn is_in_2core(&mut self, u: usize) -> bool;
     /// Check if u is in the 1-core.
     fn is_in_1core(&self, u: usize) -> bool;
 }
@@ -29,6 +29,8 @@ pub enum Data {
         idx: Node,
         /// Extra edges ON THIS LEVEL only
         extra_edges: usize,
+        /// Extra edges on all levels. This is only used on level 0.
+        any_extra_edges: usize,
     },
     Edge {
         e_id: EdgeId,
@@ -40,25 +42,36 @@ pub enum Data {
 impl std::fmt::Debug for Data {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Data::Node {
-                extra_edges: _,
-                idx,
-            } => write!(f, "({})", idx),
+            Data::Node { idx, .. } => write!(f, "({})", idx),
             Data::Edge { e_id, .. } => write!(f, "id={e_id}"),
         }
     }
 }
 
+struct NodeM<'a> {
+    extra_edges: &'a mut usize,
+    any_extra_edges: &'a mut usize,
+}
+
 impl Data {
     fn unwrap_node(&self) -> (&Node, &usize) {
         match self {
-            Data::Node { idx, extra_edges } => (idx, extra_edges),
+            Data::Node {
+                idx, extra_edges, ..
+            } => (idx, extra_edges),
             _ => panic!("Expected Node"),
         }
     }
-    fn unwrap_node_mut(&mut self) -> (&mut Node, &mut usize) {
+    fn unwrap_node_mut(&mut self) -> NodeM<'_> {
         match self {
-            Data::Node { idx, extra_edges } => (idx, extra_edges),
+            Data::Node {
+                idx: _,
+                extra_edges,
+                any_extra_edges,
+            } => NodeM {
+                extra_edges,
+                any_extra_edges,
+            },
             _ => panic!("Expected Node"),
         }
     }
@@ -82,6 +95,8 @@ pub struct AgData {
     min_edge_level: Level,
     /// Total extra edges in this level in this range
     total_extra_edges: usize,
+    /// Total extra edges on any level. This is only used in level 0.
+    total_any_extra_edges: usize,
 }
 
 impl Default for AgData {
@@ -89,6 +104,7 @@ impl Default for AgData {
         Self {
             min_edge_level: usize::MAX,
             total_extra_edges: 0,
+            total_any_extra_edges: 0,
         }
     }
 }
@@ -99,14 +115,17 @@ impl AggregatedData for AgData {
         match data {
             Data::Node {
                 extra_edges,
+                any_extra_edges,
                 idx: _,
             } => Self {
                 total_extra_edges: *extra_edges,
+                total_any_extra_edges: *any_extra_edges,
                 min_edge_level: usize::MAX,
             },
             Data::Edge { level, e_id: _ } => Self {
                 min_edge_level: *level,
                 total_extra_edges: 0,
+                total_any_extra_edges: 0,
             },
         }
     }
@@ -114,6 +133,7 @@ impl AggregatedData for AgData {
         Self {
             min_edge_level: self.min_edge_level.min(right.min_edge_level),
             total_extra_edges: self.total_extra_edges + right.total_extra_edges,
+            total_any_extra_edges: self.total_any_extra_edges + right.total_any_extra_edges,
         }
     }
 }
@@ -227,10 +247,6 @@ where
         let ((u, v), e_lvl) = self.edge(e_id);
         assert!(self.edge_info[e_id].is_extra(), "edge is not extra");
         assert_eq!(e_lvl, lvl, "edge has wrong level");
-        // assert!(
-        //     self.levels[lvl][u].is_connected(&self.levels[lvl][v]),
-        //     "extra edge but not connected"
-        // );
         for u in [u, v] {
             assert!(
                 self.u_level_to_extras[&(u, lvl)].contains(&e_id),
@@ -244,7 +260,11 @@ where
         }
         use ETData::*;
         match self.ett[lvl].inner_lists().data(node) {
-            Node(Data::Node { idx, extra_edges }) => {
+            Node(Data::Node {
+                idx,
+                extra_edges,
+                any_extra_edges,
+            }) => {
                 assert_eq!(
                     self.u_level_to_extras
                         .get(&(*idx, lvl))
@@ -252,6 +272,20 @@ where
                     *extra_edges,
                     "wrong extra edge count for {idx} at l{lvl}"
                 );
+                assert_eq!(
+                    *any_extra_edges,
+                    if lvl == 0 {
+                        (0..self.levels.len())
+                            .map(|i| {
+                                self.u_level_to_extras
+                                    .get(&(*idx, i))
+                                    .map_or(0, BTreeSet::len)
+                            })
+                            .sum()
+                    } else {
+                        0
+                    }
+                )
             }
             Edge {
                 data: Data::Edge { e_id, level, .. },
@@ -309,11 +343,44 @@ where
         }
         None
     }
-    fn extra_edges_mut(&mut self, u: Node, lvl: Level) -> &mut usize {
+    /// First and last nodes on level 0 with any_extra_edge > 0
+    fn first_and_last_nodes_with_extra_edges(&mut self, u: Node) -> Option<(Node, Node)> {
+        let u = self.levels[0][u];
+        self.ett[0].reroot(u);
+        let first = self.ett[0].find_element(u, |d| {
+            if d.left_agg.total_any_extra_edges > 0 {
+                SearchDirection::Left
+            } else if matches!(d.current_data, Data::Node { any_extra_edges, .. } if *any_extra_edges > 0)
+            {
+                SearchDirection::Found
+            } else if d.right_agg.total_any_extra_edges > 0 {
+                SearchDirection::Right
+            } else {
+                SearchDirection::NotFound
+            }
+        });
+        let last = self.ett[0].find_element(u, |d| {
+            if d.right_agg.total_any_extra_edges > 0 {
+                SearchDirection::Right
+            } else if matches!(d.current_data, Data::Node { any_extra_edges, .. } if *any_extra_edges > 0)
+            {
+                SearchDirection::Found
+            } else if d.left_agg.total_any_extra_edges > 0 {
+                SearchDirection::Left
+            } else {
+                SearchDirection::NotFound
+            }
+        });
+        if first != last {
+            Some((first, last))
+        } else {
+            None
+        }
+    }
+    fn unwrap_node_mut(&mut self, u: Node, lvl: Level) -> NodeM<'_> {
         self.ett[lvl]
             .data_mut(self.levels[lvl][u])
             .unwrap_node_mut()
-            .1
     }
     // Does not affect the Data::Edge.levels field
     fn add_edge_id(&mut self, e_id: EdgeId) {
@@ -326,7 +393,8 @@ where
                     .entry((w, lvl))
                     .or_default()
                     .insert(e_id));
-                *self.extra_edges_mut(w, lvl) += 1;
+                *self.unwrap_node_mut(w, lvl).extra_edges += 1;
+                *self.unwrap_node_mut(w, 0).any_extra_edges += 1;
             }
             self.assert_extra(e_id, lvl);
         }
@@ -342,7 +410,8 @@ where
                     .get_mut(&(w, lvl))
                     .unwrap()
                     .remove(&e_id));
-                *self.extra_edges_mut(w, lvl) -= 1;
+                *self.unwrap_node_mut(w, lvl).extra_edges -= 1;
+                *self.unwrap_node_mut(w, 0).any_extra_edges -= 1;
             }
         }
     }
@@ -402,6 +471,7 @@ where
                     .map(|idx| {
                         ett[lvl].create_node(Data::Node {
                             extra_edges: 0,
+                            any_extra_edges: 0,
                             idx,
                         })
                     })
@@ -534,8 +604,14 @@ where
         self.ett[0].is_connected(self.levels[0][u], self.levels[0][v])
     }
 
-    fn is_in_2core(&self, u: usize) -> bool {
-        todo!()
+    fn is_in_2core(&mut self, u: usize) -> bool {
+        self.first_and_last_nodes_with_extra_edges(u)
+            .map_or(false, |(first, last)| {
+                if first == 0 {
+                    return true;
+                }
+                todo!("I need to figure out if first and last are in the same subtree of u")
+            })
     }
 
     fn is_in_1core(&self, u: usize) -> bool {

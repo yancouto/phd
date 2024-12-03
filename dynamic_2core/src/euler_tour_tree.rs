@@ -155,8 +155,8 @@ where
     /// Makes the given node the root of its tree.
     pub fn reroot(&mut self, u: NodeRef) {
         if !self.l.is_first(u.0) {
-            let (bef, aft, _) = self.l.split(u.0, self.l.order(u.0)..);
-            self.l.concat(aft, bef);
+            let (before_u, u_and_after, _) = self.l.split(u.0, self.l.order(u.0)..);
+            self.l.concat(u_and_after, before_u);
         }
     }
     /// Adds an edge between the root of self and the root of other. Panics if they are on the same tree.

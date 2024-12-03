@@ -173,7 +173,7 @@ impl Dynamic2CoreSolver for Dumb {
         false
     }
 
-    fn is_in_2core(&self, u: usize) -> bool {
+    fn is_in_2core(&mut self, u: usize) -> bool {
         let mut new_adj = self.adj.clone();
         let mut to_rem: Vec<_> = (0..self.adj.len())
             .filter(|&v| self.adj[v].len() <= 1)
