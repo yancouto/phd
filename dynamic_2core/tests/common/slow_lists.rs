@@ -1,12 +1,28 @@
-use std::ops::RangeBounds;
+use std::{fmt::Debug, ops::RangeBounds};
 
 use dynamic_2core::lists::*;
 
 /// Dummy implementation, most of the operations take linear time.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SlowLists<Ag: AggregatedData> {
     lists: Vec<Vec<Entry<Ag>>>,
     u_to_list: Vec<usize>,
+}
+
+impl<Ag: AggregatedData> Debug for SlowLists<Ag> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SlowLists:")?;
+        for l in &self.lists {
+            if l.len() > 1 {
+                write!(f, " [")?;
+                for e in l {
+                    write!(f, "{}({:?}) ", e.idx, e.data)?;
+                }
+                write!(f, "]\n")?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +162,11 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
             std::ops::Bound::Excluded(r) => *r,
             std::ops::Bound::Unbounded => self.list(u).len(),
         };
+        log::trace!("u {u} split {l}..{r}");
+        assert!(
+            l <= r && r <= self.lists[lu].len(),
+            "Invalid range {l}..{r}: {self:?}"
+        );
         let mut it = self.lists[lu].drain(..r);
         let gl: Vec<_> = (0..l).map(|_| it.next().unwrap()).collect();
         let gm: Vec<_> = it.collect();

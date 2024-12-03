@@ -110,11 +110,11 @@ where
                 for i in 0..self.l.len(u) {
                     let j = self.l.find_kth(u, i);
                     match self.l.data(j) {
-                        ETData::Node(d) => write!(f, "{:?} ", d)?,
-                        _ => {}
+                        ETData::Node(d) => write!(f, "{j}{d:?} ")?,
+                        ETData::Edge { data, other } => write!(f, "{j}[{data:?}] ")?,
                     }
                 }
-                write!(f, ">")?;
+                write!(f, "> ")?;
             }
         }
 
@@ -176,17 +176,24 @@ where
         }); // uw
         let wu = self.l.create(ETData::Edge {
             data: wu_data,
-            other: mx,
+            other: uw,
         }); // wu
-            // "AAA u BBB" and "w CCC" (it is root) becomes
-            // AAA u uw w CCC wu BBB
+        assert_eq!(uw, mx);
+        assert_eq!(wu, mx + 1);
+
+        // "AAA u BBB" and "w CCC" (it is root) becomes
+        // AAA u uw w CCC wu BBB
         let (_, until_u, after_u) = self.l.split(u.0, 0..=self.l.order(u.0));
         self.l.concat_all([until_u, uw, root_w.0, wu, after_u]);
-        EdgeRef(mx)
+        EdgeRef(uw)
     }
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
     pub fn disconnect(&mut self, edge: EdgeRef) -> (NodeRef, NodeRef) {
         let (edge, other_e) = (edge.0, edge.0 + 1);
+        assert!(
+            self.l.on_same_list(edge, other_e),
+            "edge {edge} {other_e} must be connected {self:?}"
+        );
         let (a, b) = (self.l.order(edge), self.l.order(other_e));
         let (left, middle, right) = self.l.split(edge, a.min(b)..=a.max(b));
         // Remove the first and last items, which is the edge which no longer exists

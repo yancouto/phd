@@ -34,6 +34,7 @@ pub enum Data {
         e_id: EdgeId,
         // Level of this tree edge
         level: Level,
+        uv: (Node, Node),
     },
 }
 
@@ -44,7 +45,11 @@ impl std::fmt::Debug for Data {
                 extra_edges: _,
                 idx,
             } => write!(f, "({})", idx),
-            Data::Edge { level, e_id: _ } => write!(f, "l{}", level),
+            Data::Edge {
+                level: _,
+                e_id: _,
+                uv: (u, v),
+            } => write!(f, "{u}-{v}"),
         }
     }
 }
@@ -64,13 +69,13 @@ impl Data {
     }
     fn unwrap_edge(&self) -> (&EdgeId, &Level) {
         match self {
-            Data::Edge { e_id, level } => (e_id, level),
+            Data::Edge { e_id, level, uv: _ } => (e_id, level),
             _ => panic!("Expected Edge"),
         }
     }
     fn unwrap_edge_mut(&mut self) -> (&mut EdgeId, &mut Level) {
         match self {
-            Data::Edge { e_id, level } => (e_id, level),
+            Data::Edge { e_id, level, uv: _ } => (e_id, level),
             _ => panic!("Expected Edge"),
         }
     }
@@ -104,7 +109,11 @@ impl AggregatedData for AgData {
                 total_extra_edges: *extra_edges,
                 min_edge_level: usize::MAX,
             },
-            Data::Edge { level, e_id: _ } => Self {
+            Data::Edge {
+                level,
+                e_id: _,
+                uv: _,
+            } => Self {
                 min_edge_level: *level,
                 total_extra_edges: 0,
             },
@@ -143,7 +152,7 @@ where
     // lg levels
     levels: Vec<Vec<NodeRef>>,
     edge_info: Vec<EdgeInfo>,
-    // (u, v) -> id
+    // (u, v) -> position on edge_info array
     e_to_id: BTreeMap<(Node, Node), usize>,
     /// Only exists for extra edges
     u_level_to_extras: BTreeMap<(Node, Level), BTreeSet<EdgeId>>,
@@ -256,7 +265,7 @@ where
                 );
             }
             Edge {
-                data: Data::Edge { e_id, level },
+                data: Data::Edge { e_id, level, .. },
                 other: _,
             } => {
                 assert!(*level >= lvl, "tree edge has level smaller than ETT level");
@@ -379,17 +388,21 @@ where
             {
                 *self.ett[elvl].edata_mut(*e, dir).unwrap_edge_mut().1 = lvl + 1;
             }
-            let e = Data::Edge {
-                level: lvl + 1,
-                e_id,
-            };
             levels.push(
                 self.ett[lvl + 1]
                     .connect(
                         self.levels[lvl + 1][u],
                         self.levels[lvl + 1][v],
-                        e.clone(),
-                        e,
+                        Data::Edge {
+                            level: lvl + 1,
+                            e_id,
+                            uv: (u, v),
+                        },
+                        Data::Edge {
+                            level: lvl + 1,
+                            e_id,
+                            uv: (v, u),
+                        },
                     )
                     .expect("shouldn't be connected at next level"),
             );
@@ -445,8 +458,22 @@ where
             return false;
         }
         let e_id = self.edge_info.len();
-        let e = Data::Edge { level: 0, e_id };
-        let added = self.ett[0].connect(self.levels[0][u], self.levels[0][v], e.clone(), e);
+        let (uv, vu) = (
+            Data::Edge {
+                level: 0,
+                e_id,
+                uv: (u, v),
+            },
+            Data::Edge {
+                level: 0,
+                e_id,
+                uv: (v, u),
+            },
+        );
+        let added = self.ett[0].connect(self.levels[0][u], self.levels[0][v], uv, vu);
+        if e_id == 64 {
+            log::info!("Added {u} {v} with id {e_id} added {added:?} lvl 0");
+        }
         self.edge_info.push(EdgeInfo {
             e: (u, v),
             level: 0,
@@ -480,9 +507,8 @@ where
                 .map(|(lvl, e)| {
                     let ett = &self.ett[lvl];
                     log::trace!(
-                        "[lvl {lvl}] before: {:?} b {:?}",
+                        "[lvl {lvl} id {e:?}] before: {:?}",
                         Dbg(self as &_, lvl, AllEdges),
-                        e
                     );
                     assert!(ett.is_connected(self.levels[lvl][u], self.levels[lvl][v]));
                     let (tu, tv) = self.ett[lvl].disconnect(e);
@@ -524,15 +550,26 @@ where
                 while let Some(f_id) = self.find_level_i_extra_edge(i, small) {
                     let (a, b) = self.edge_info[f_id].e;
                     if !self.ett[i].is_connected(self.levels[i][a], self.levels[i][b]) {
-                        log::trace!("Extra edge ({}, {}) at level {} will replace", a, b, i);
+                        log::trace!("Extra edge ({a}, {b}) at level {i} will replace");
+                        if f_id == 64 {
+                            log::info!("Upgrading {a} {b}");
+                        }
                         self.rem_edge_id(f_id);
                         let mut rs = vec![];
                         // This is a replacement edge, add it to the tree in this and previous levels, then exit.
-                        let e = Data::Edge {
-                            level: i,
-                            e_id: f_id,
-                        };
-                        for j in (0..=i).rev() {
+                        let (ab, ba) = (
+                            Data::Edge {
+                                level: i,
+                                e_id: f_id,
+                                uv: (a, b),
+                            },
+                            Data::Edge {
+                                level: i,
+                                e_id: f_id,
+                                uv: (b, a),
+                            },
+                        );
+                        for j in 0..=i {
                             assert!(!self.ett[j].is_connected(self.levels[j][u], self.levels[j][v]));
                             assert!(
                                 !self.ett[j].is_connected(self.levels[j][a], self.levels[j][b]),
@@ -543,7 +580,12 @@ where
                                 self
                             );
                             let r = self.ett[j]
-                                .connect(self.levels[j][a], self.levels[j][b], e.clone(), e.clone())
+                                .connect(
+                                    self.levels[j][a],
+                                    self.levels[j][b],
+                                    ab.clone(),
+                                    ba.clone(),
+                                )
                                 .expect("shouldn't be connected at previous level");
                             log::trace!("[lvl {}] after: {:?}", j, Dbg(self as &_, j, NoEdges));
                             assert!(self.ett[j].is_connected(self.levels[j][a], self.levels[j][b]));

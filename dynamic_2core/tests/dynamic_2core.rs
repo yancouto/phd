@@ -47,7 +47,7 @@ where
         Self::test_dyn_con();
     }
 
-    fn compare_with_dumb()
+    fn compare_with_dumb(seed: u64)
     where
         T: std::fmt::Debug,
     {
@@ -55,17 +55,10 @@ where
         let mut t1 = T::new(N);
         let mut t2 = Dumb::new(N);
         let mut edges = vec![];
-        let mut rng = rand::rngs::StdRng::seed_from_u64(20178);
-        for q in 0..3000 {
-            if q % 100 == 0 || q == 1562 || q >= 163 {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        for q in 0..4000 {
+            if q % 100 == 0 {
                 println!("q {}", q);
-            }
-            if q == 1562 || q == 163 {
-                LOGGER
-                    .lock()
-                    .unwrap()
-                    .parse_and_push_temp_spec("trace")
-                    .unwrap();
             }
             if edges.is_empty() || rng.gen_bool(0.66) {
                 let mut u = rng.gen_range(0..N);
@@ -78,15 +71,14 @@ where
                 let added = t1.add_edge(u, v);
                 assert_eq!(added, t2.add_edge(u, v));
                 if added {
-                    // println!("Added edge {} {}\n{:?}\n", u, v, &t1);
                     edges.push((u, v));
+                    log::trace!("Added edge {u} {v}");
                 }
             } else {
                 let idx = rng.gen_range(0..edges.len());
-                let (u, v) = edges[idx];
+                let (u, v) = edges.swap_remove(idx);
                 assert_eq!(t1.remove_edge(u, v), t2.remove_edge(u, v));
-                edges.swap_remove(idx);
-                // println!("Removed edge {} {}\n{:?}\n", u, v, &t1);
+                log::trace!("Removed edge {u} {v}");
             }
             if q % 1 == 0 {
                 let gs = t2.groups();
@@ -212,7 +204,18 @@ fn test_dumb() {
 // Can't run these in parallel because we used ugly globals.
 #[test]
 fn test_slow() {
-    init_logger();
     D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::test_all();
-    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb();
+}
+
+#[test]
+fn test_cmp1() {
+    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(9232345);
+}
+#[test]
+fn test_cmp2() {
+    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(100000007);
+}
+#[test]
+fn test_cmp3() {
+    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(3);
 }
