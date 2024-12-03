@@ -1,7 +1,7 @@
 use rand::{Rng, SeedableRng};
 use std::collections::BTreeSet;
 
-use common::{init_logger, slow_lists::SlowLists, LOGGER};
+use common::{init_logger, slow_lists::SlowLists};
 use dynamic_2core::{
     dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver},
     euler_tour_tree::ETAggregated,
@@ -56,9 +56,9 @@ where
         let mut t2 = Dumb::new(N);
         let mut edges = vec![];
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        for q in 0..4000 {
+        for q in 0..10000 {
             if q % 100 == 0 {
-                println!("q {}", q);
+                log::debug!("q {}", q);
             }
             if edges.is_empty() || rng.gen_bool(0.66) {
                 let mut u = rng.gen_range(0..N);
@@ -80,7 +80,7 @@ where
                 assert_eq!(t1.remove_edge(u, v), t2.remove_edge(u, v));
                 log::trace!("Removed edge {u} {v}");
             }
-            if q % 1 == 0 {
+            if q % 10 == 0 {
                 let gs = t2.groups();
                 for u in 0..N {
                     for v in 0..N {
@@ -198,6 +198,7 @@ impl Dynamic2CoreSolver for Dumb {
 
 #[test]
 fn test_dumb() {
+    init_logger();
     D2CTests::<Dumb>::test_all();
 }
 

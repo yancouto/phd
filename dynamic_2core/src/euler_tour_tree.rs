@@ -111,7 +111,7 @@ where
                     let j = self.l.find_kth(u, i);
                     match self.l.data(j) {
                         ETData::Node(d) => write!(f, "{j}{d:?} ")?,
-                        ETData::Edge { data, other } => write!(f, "{j}[{data:?}] ")?,
+                        ETData::Edge { data, .. } => write!(f, "{j}[{data:?}] ")?,
                     }
                 }
                 write!(f, "> ")?;
