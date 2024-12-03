@@ -242,6 +242,30 @@ where
         &self.l
     }
 
+    pub fn data(&self, u: NodeRef) -> &Ag::Data {
+        self.l.data(u.0).data()
+    }
+
+    pub fn data_mut(&mut self, u: NodeRef) -> &mut Ag::Data {
+        self.l.data_mut(u.0).data_mut()
+    }
+
+    pub fn edata(&self, e: EdgeRef) -> [&Ag::Data; 2] {
+        [self.l.data(e.0).data(), self.l.data(e.0 + 1).data()]
+    }
+
+    pub fn edata_mut(&mut self, e: EdgeRef, direction: bool) -> &mut Ag::Data {
+        self.l.data_mut(e.0 + (direction as usize)).data_mut()
+    }
+
+    pub fn try_node(&self, u: Idx) -> Option<NodeRef> {
+        if matches!(self.l.data(u), ETData::Node(_)) {
+            Some(NodeRef(u))
+        } else {
+            None
+        }
+    }
+
     pub fn deb_ord(&self, u: Idx, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     where
         Ag::Data: Ord,

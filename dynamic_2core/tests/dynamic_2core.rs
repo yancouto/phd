@@ -1,8 +1,11 @@
-/*use rand::{Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use std::collections::BTreeSet;
 
-use common::{init_logger, slow_lists::SlowET, LOGGER};
-use dynamic_2core::dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver};
+use common::{init_logger, slow_lists::SlowLists, LOGGER};
+use dynamic_2core::{
+    dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver},
+    euler_tour_tree::ETAggregated,
+};
 
 mod common;
 
@@ -210,7 +213,6 @@ fn test_dumb() {
 #[test]
 fn test_slow() {
     init_logger();
-    D2CTests::<ETTSolver<SlowET<AgData>>>::test_all();
-    D2CTests::<ETTSolver<SlowET<AgData>>>::compare_with_dumb();
+    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::test_all();
+    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb();
 }
-*/
