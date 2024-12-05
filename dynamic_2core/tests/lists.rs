@@ -43,7 +43,7 @@ impl<L: Lists<AggSum>> BSTTests<L> {
     }
 
     fn test_new_empty() {
-        let l = L::new(0);
+        let mut l = L::new(0);
         assert_eq!(l.total_agg(usize::MAX).0, 0);
     }
 

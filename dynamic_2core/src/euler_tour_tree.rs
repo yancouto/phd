@@ -226,7 +226,7 @@ where
 
     /// Finds an element in the tree containing this node. Returns the inner idx to be used with self.inner_lists.
     pub fn find_element(
-        &self,
+        &mut self,
         u: NodeRef,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {

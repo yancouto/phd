@@ -308,7 +308,7 @@ where
             _ => panic!("Invalid data"),
         }
     }
-    fn find_level_i_tree_edge(&self, i: Level, u: NodeRef) -> Option<EdgeId> {
+    fn find_level_i_tree_edge(&mut self, i: Level, u: NodeRef) -> Option<EdgeId> {
         let found = self.ett[i].find_element(u, |d| {
             if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
                 SearchDirection::Found
@@ -327,7 +327,7 @@ where
         }
         None
     }
-    fn find_level_i_extra_edge(&self, i: Level, u: NodeRef) -> Option<EdgeId> {
+    fn find_level_i_extra_edge(&mut self, i: Level, u: NodeRef) -> Option<EdgeId> {
         let found = self.ett[i].find_element(u, |d| {
             if matches!(d.current_data, Data::Node { extra_edges, .. } if *extra_edges > 0) {
                 SearchDirection::Found

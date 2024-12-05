@@ -90,17 +90,19 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
     }
 
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
         let left_agg = Ag::default();
         use SearchDirection::*;
-        for (i, e) in self.list(u).iter().enumerate() {
+        for i in (0..self.list(u).len()) {
+            let right_agg = self.range_agg(u, i + 1..);
+            let e = &self.list(u)[i];
             match search_strategy(SearchData {
                 current_data: &e.data,
                 left_agg: &left_agg,
-                right_agg: &self.range_agg(u, i + 1..),
+                right_agg: &right_agg,
             }) {
                 Found => return e.idx,
                 NotFound => return Self::EMPTY,
@@ -122,7 +124,7 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         self.list(u).len()
     }
 
-    fn range_agg(&self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
+    fn range_agg(&mut self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
         self.list(u)
             .iter()
             .enumerate()
@@ -147,21 +149,11 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         self.root(u)
     }
 
-    fn split(&mut self, u: Idx, range: impl RangeBounds<usize>) -> (Idx, Idx, Idx) {
+    fn split_lr(&mut self, u: Idx, l: usize, r: usize) -> (Idx, Idx, Idx) {
         if u == Self::EMPTY {
             return (Self::EMPTY, Self::EMPTY, Self::EMPTY);
         }
         let lu = self.u_to_list[u];
-        let l = match range.start_bound() {
-            std::ops::Bound::Included(l) => *l,
-            std::ops::Bound::Excluded(l) => *l + 1,
-            std::ops::Bound::Unbounded => 0,
-        };
-        let r = match range.end_bound() {
-            std::ops::Bound::Included(r) => *r + 1,
-            std::ops::Bound::Excluded(r) => *r,
-            std::ops::Bound::Unbounded => self.list(u).len(),
-        };
         log::trace!("u {u} split {l}..{r}");
         assert!(
             l <= r && r <= self.lists[lu].len(),
