@@ -3,13 +3,28 @@ extern crate test;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::collections::BTreeSet;
 
-use common::{init_logger, slow_lists::SlowLists};
+use common::{init_logger, slow_lct::SlowLCT, slow_lists::SlowLists};
 use dynamic_2core::{
-    dynamic_2core::{AgData, Dynamic2CoreSolver, ETTSolver},
+    dynamic_2core::{AgData, D2CSolver, Dynamic2CoreSolver},
     euler_tour_tree::ETAggregated,
 };
 
 mod common;
+
+trait ToEdge {
+    fn to_edge(&self) -> (usize, usize);
+}
+impl ToEdge for (usize, usize) {
+    fn to_edge(&self) -> (usize, usize) {
+        *self
+    }
+}
+impl ToEdge for usize {
+    fn to_edge(&self) -> (usize, usize) {
+        assert!(*self < 100);
+        (self / 10, self % 10)
+    }
+}
 
 struct D2CTests<T>(std::marker::PhantomData<T>)
 where
@@ -31,6 +46,28 @@ where
         }
     }
 
+    fn map_core_numbers<T2: Dynamic2CoreSolver>(t: &mut T2, n: usize) -> Vec<usize> {
+        (0..n)
+            .map(|u| match (t.is_in_1core(u), t.is_in_2core(u)) {
+                (true, true) => 2,
+                (true, false) => 1,
+                (false, false) => 0,
+                (false, true) => panic!("In 2core but not in 1core"),
+            })
+            .collect()
+    }
+
+    fn assert_core_numbers(t: &mut T, cores: &[usize]) {
+        let all = Self::map_core_numbers(t, cores.len());
+        assert_eq!(all, cores);
+    }
+
+    fn add_edges(t: &mut T, edges: &[impl ToEdge]) {
+        for (u, v) in edges.iter().map(ToEdge::to_edge) {
+            assert!(t.add_edge(u, v));
+        }
+    }
+
     fn test_dyn_con() {
         let mut t = T::new(5);
         Self::assert_all_connections(&t, &[&[0], &[1], &[2], &[3], &[4]]);
@@ -45,8 +82,27 @@ where
         Self::assert_all_connections(&t, &[&[0, 2], &[1, 4], &[3]]);
     }
 
+    fn test_2core() {
+        let mut t = T::new(11);
+        Self::assert_core_numbers(&mut t, &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        Self::add_edges(&mut t, &[01, 02, 03, 14, 15, 26, 27, 58, 59]);
+        t.add_edge(7, 10);
+        Self::assert_core_numbers(&mut t, &[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+        t.add_edge(4, 9);
+        Self::assert_core_numbers(&mut t, &[1, 2, 1, 1, 2, 2, 1, 1, 1, 2, 1]);
+        t.add_edge(6, 7);
+        Self::assert_core_numbers(&mut t, &[2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 1]);
+        t.remove_edge(4, 9);
+        Self::assert_core_numbers(&mut t, &[1, 1, 2, 1, 1, 1, 2, 2, 1, 1, 1]);
+        t.add_edge(10, 3);
+        Self::assert_core_numbers(&mut t, &[2, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2]);
+        t.remove_edge(6, 7);
+        Self::assert_core_numbers(&mut t, &[2, 1, 2, 2, 1, 1, 1, 2, 1, 1, 2]);
+    }
+
     fn test_all() {
         Self::test_dyn_con();
+        Self::test_2core();
     }
 
     fn compare_with_dumb(seed: u64)
@@ -98,6 +154,10 @@ where
                         );
                     }
                 }
+                assert_eq!(
+                    Self::map_core_numbers(&mut t1, N),
+                    Self::map_core_numbers(&mut t2, N)
+                );
             }
         }
     }
@@ -105,6 +165,8 @@ where
 
 struct Dumb {
     adj: Vec<BTreeSet<usize>>,
+    saved_core: Vec<bool>,
+    invalidated: bool,
 }
 
 impl std::fmt::Debug for Dumb {
@@ -148,14 +210,18 @@ impl Dynamic2CoreSolver for Dumb {
     fn new(n: usize) -> Self {
         Self {
             adj: vec![BTreeSet::new(); n],
+            saved_core: vec![false; n],
+            invalidated: false,
         }
     }
 
     fn add_edge(&mut self, u: usize, v: usize) -> bool {
+        self.invalidated = true;
         self.adj[u].insert(v) && self.adj[v].insert(u)
     }
 
     fn remove_edge(&mut self, u: usize, v: usize) -> bool {
+        self.invalidated = true;
         self.adj[u].remove(&v) && self.adj[v].remove(&u)
     }
 
@@ -174,15 +240,16 @@ impl Dynamic2CoreSolver for Dumb {
     }
 
     fn is_in_2core(&mut self, u: usize) -> bool {
+        if !self.invalidated {
+            return self.saved_core[u];
+        }
+        self.invalidated = false;
         let mut new_adj = self.adj.clone();
         let mut to_rem: Vec<_> = (0..self.adj.len())
             .filter(|&v| self.adj[v].len() <= 1)
             .collect();
         let mut seen = BTreeSet::from_iter(to_rem.iter().copied());
         while let Some(v) = to_rem.pop() {
-            if v == u {
-                return false;
-            }
             for w in new_adj[v].clone() {
                 new_adj[w].remove(&v);
                 if new_adj[w].len() <= 1 && seen.insert(w) {
@@ -190,7 +257,10 @@ impl Dynamic2CoreSolver for Dumb {
                 }
             }
         }
-        true
+        for u in 0..self.adj.len() {
+            self.saved_core[u] = !seen.contains(&u);
+        }
+        self.saved_core[u]
     }
 
     fn is_in_1core(&self, u: usize) -> bool {
@@ -204,23 +274,23 @@ fn test_dumb() {
     D2CTests::<Dumb>::test_all();
 }
 
-// Can't run these in parallel because we used ugly globals.
 #[test]
 fn test_slow() {
-    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::test_all();
+    init_logger();
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::test_all();
 }
 
 #[test]
 fn test_cmp1() {
-    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(9232345);
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(9232345);
 }
 #[test]
 fn test_cmp2() {
-    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(100000007);
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(100000007);
 }
 #[test]
 fn test_cmp3() {
-    D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(3);
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(3);
 }
 
 fn stress() {
@@ -228,7 +298,7 @@ fn stress() {
     loop {
         let seed: u64 = thread_rng().gen();
         log::info!("seed = {seed}");
-        D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(seed);
+        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(seed);
     }
 }
 
@@ -244,6 +314,6 @@ fn test_stress0(b: &mut test::Bencher) {
     b.iter(|| {
         let seed: u64 = thread_rng().gen();
         log::info!("seed = {seed}");
-        D2CTests::<ETTSolver<SlowLists<ETAggregated<AgData>>>>::compare_with_dumb(seed);
+        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(seed);
     })
 }

@@ -3,6 +3,7 @@ use std::sync::{LazyLock, Mutex};
 use dynamic_2core::lists::AggregatedData;
 use flexi_logger::{Logger, LoggerHandle};
 
+pub mod slow_lct;
 pub mod slow_lists;
 
 #[derive(Debug, Clone, Default)]

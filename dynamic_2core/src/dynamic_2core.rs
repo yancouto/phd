@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     euler_tour_tree::{ETAggregated, ETData, EdgeRef, EulerTourTree, NodeRef},
+    link_cut_tree::LinkCutTree,
     lists::{AggregatedData, Idx, Lists, SearchDirection},
 };
 
@@ -154,9 +155,10 @@ impl EdgeInfo {
     }
 }
 
-pub struct ETTSolver<L>
+pub struct D2CSolver<L, LC>
 where
     L: Lists<ETAggregated<AgData>>,
+    LC: LinkCutTree,
 {
     // We can make this a single ETT, but it's easier to debug this way
     ett: Vec<EulerTourTree<L, AgData>>,
@@ -167,11 +169,14 @@ where
     e_to_id: BTreeMap<(Node, Node), usize>,
     /// Only exists for extra edges
     u_level_to_extras: BTreeMap<(Node, Level), BTreeSet<EdgeId>>,
+    /// Link cut tree of the spanning tree of level 0
+    lc_0: LC,
 }
 
-impl<BST> std::fmt::Debug for ETTSolver<BST>
+impl<L, LC> std::fmt::Debug for D2CSolver<L, LC>
 where
-    BST: Lists<ETAggregated<AgData>>,
+    L: Lists<ETAggregated<AgData>>,
+    LC: LinkCutTree,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.dbg(f, 0, AllEdges)
@@ -188,18 +193,20 @@ use DbgMode::*;
 
 struct Dbg<T>(T, Level, DbgMode);
 
-impl<BST> std::fmt::Debug for Dbg<&ETTSolver<BST>>
+impl<L, LC> std::fmt::Debug for Dbg<&D2CSolver<L, LC>>
 where
-    BST: Lists<ETAggregated<AgData>>,
+    L: Lists<ETAggregated<AgData>>,
+    LC: LinkCutTree,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.dbg(f, self.1, self.2)
     }
 }
 
-impl<L> ETTSolver<L>
+impl<L, LC> D2CSolver<L, LC>
 where
     L: Lists<ETAggregated<AgData>>,
+    LC: LinkCutTree,
 {
     fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, mode: DbgMode) -> std::fmt::Result {
         write!(f, "ETTSolver Level {}:", i)?;
@@ -346,7 +353,6 @@ where
     /// First and last nodes on level 0 with any_extra_edge > 0
     fn first_and_last_nodes_with_extra_edges(&mut self, u: Node) -> Option<(Node, Node)> {
         let u = self.levels[0][u];
-        self.ett[0].reroot(u);
         let first = self.ett[0].find_element(u, |d| {
             if d.left_agg.total_any_extra_edges > 0 {
                 SearchDirection::Left
@@ -456,9 +462,10 @@ where
     }
 }
 
-impl<BST> Dynamic2CoreSolver for ETTSolver<BST>
+impl<L, LC> Dynamic2CoreSolver for D2CSolver<L, LC>
 where
-    BST: Lists<ETAggregated<AgData>>,
+    L: Lists<ETAggregated<AgData>>,
+    LC: LinkCutTree,
 {
     fn new(n: usize) -> Self {
         let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 1;
@@ -484,6 +491,7 @@ where
             edge_info: Vec::new(),
             e_to_id: BTreeMap::new(),
             u_level_to_extras: BTreeMap::new(),
+            lc_0: LC::new(n),
         }
     }
 
@@ -497,6 +505,9 @@ where
         let e_id = self.edge_info.len();
         let e = Data::Edge { level: 0, e_id };
         let added = self.ett[0].connect(self.levels[0][u], self.levels[0][v], e.clone(), e);
+        if added.is_some() {
+            assert!(self.lc_0.link(u, v));
+        }
         self.edge_info.push(EdgeInfo {
             e: (u, v),
             level: 0,
@@ -520,6 +531,8 @@ where
                 "Removing tree edge {e_id} = ({u}, {v}) at level {}",
                 self.edge_info[e_id].level
             );
+            self.lc_0.reroot(u);
+            assert_eq!(self.lc_0.cut(v), Some(u));
             let smallest_comp: Vec<_> = levels
                 .into_iter()
                 .enumerate()
@@ -554,6 +567,7 @@ where
                     let (a, b) = self.edge_info[f_id].e;
                     if !self.ett[i].is_connected(self.levels[i][a], self.levels[i][b]) {
                         log::trace!("Extra edge ({a}, {b}) at level {i} will replace");
+                        assert!(self.lc_0.link(a, b));
                         self.rem_edge_id(f_id);
                         let mut rs = vec![];
                         // This is a replacement edge, add it to the tree in this and previous levels, then exit.
@@ -605,12 +619,18 @@ where
     }
 
     fn is_in_2core(&mut self, u: usize) -> bool {
+        self.ett[0].reroot(self.levels[0][u]);
+        self.lc_0.reroot(u);
         self.first_and_last_nodes_with_extra_edges(u)
             .map_or(false, |(first, last)| {
-                if first == 0 {
+                if first == u {
                     return true;
                 }
-                todo!("I need to figure out if first and last are in the same subtree of u")
+                let first_subtree = self.lc_0.kth_in_path_from_root(first, 1);
+                let last_subtree = self.lc_0.kth_in_path_from_root(last, 1);
+                // Different subtree means u is in their path, and thus either in a cycle
+                // or in a path between cycles
+                first_subtree != last_subtree
             })
     }
 
