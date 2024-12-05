@@ -137,6 +137,9 @@ impl AggregatedData for AgData {
             total_any_extra_edges: self.total_any_extra_edges + right.total_any_extra_edges,
         }
     }
+    fn reverse(self) -> Self {
+        self
+    }
 }
 
 #[derive(Debug)]

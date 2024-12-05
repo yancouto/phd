@@ -1,11 +1,12 @@
-use common::{slow_lists::SlowLists, AggSum};
+use common::{init_logger, slow_lists::SlowLists, AggSum};
 use dynamic_2core::lists::*;
+use treap::Treaps;
 
 mod common;
 
-struct BSTTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
+struct LTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
 
-impl<L: Lists<AggSum>> BSTTests<L> {
+impl<L: Lists<AggSum>> LTests<L> {
     fn build(v: &[i32]) -> L {
         let l = L::from_iter(v.iter().copied());
         Self::assert_data(&l, 0, v);
@@ -25,7 +26,7 @@ impl<L: Lists<AggSum>> BSTTests<L> {
     }
 
     fn assert_data(l: &L, u: usize, data: &[i32]) {
-        assert_eq!(l.len(u), data.len());
+        assert_eq!(l.len(u), data.len(), "{l:?}");
         for i in 0..data.len() {
             assert_eq!(l.data(l.find_kth(u, i)), &data[i]);
         }
@@ -43,7 +44,7 @@ impl<L: Lists<AggSum>> BSTTests<L> {
     }
 
     fn test_new_empty() {
-        let mut l = L::new(0);
+        let l = L::new(0);
         assert_eq!(l.total_agg(usize::MAX).0, 0);
     }
 
@@ -74,7 +75,7 @@ impl<L: Lists<AggSum>> BSTTests<L> {
         assert_eq!(l.range_agg(0, 4..), 11);
         assert_eq!(l.range_agg(0, 0..0), 0);
         let (left, mid, right) = l.split(0, 1..=3);
-        assert_eq!(l.total_agg(left), 1);
+        assert_eq!(l.total_agg(left), 1, "{l:?}");
         assert_eq!(l.total_agg(mid), 12, "l = {l:?}");
         assert_eq!(l.total_agg(right), 11);
         Self::assert_data(&l, left, &[1]);
@@ -167,5 +168,11 @@ impl<L: Lists<AggSum>> BSTTests<L> {
 
 #[test]
 fn test_slow_lists() {
-    BSTTests::<SlowLists<AggSum>>::test_all();
+    LTests::<SlowLists<AggSum>>::test_all();
+}
+
+#[test]
+fn test_treap() {
+    init_logger();
+    LTests::<Treaps<AggSum>>::test_all();
 }

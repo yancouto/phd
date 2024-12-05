@@ -80,6 +80,12 @@ impl<Ag: AggregatedData> AggregatedData for ETAggregated<Ag> {
             subtree_size: self.subtree_size + right.subtree_size,
         }
     }
+    fn reverse(self) -> Self {
+        Self {
+            data: self.data.reverse(),
+            subtree_size: self.subtree_size,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

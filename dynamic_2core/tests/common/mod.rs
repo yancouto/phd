@@ -19,6 +19,10 @@ impl AggregatedData for AggSum {
     fn merge(self, right: Self) -> Self {
         Self(self.0 + right.0)
     }
+
+    fn reverse(self) -> Self {
+        self
+    }
 }
 
 impl PartialEq<i32> for AggSum {

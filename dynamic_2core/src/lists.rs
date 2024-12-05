@@ -4,11 +4,14 @@ use std::ops::RangeBounds;
 pub mod treap;
 
 pub trait AggregatedData: Debug + Sized + Clone + Default {
+    // Should Data::reverse exist? Not necessary for us, but more generic.
     type Data: Debug + Sized + Clone;
     /// Create aggregated data from a single data item
     fn from(data: &Self::Data) -> Self;
     /// Merge two aggregated data items. The other item contains data of some (not necessarily all) items to the right.
     fn merge(self, right: Self) -> Self;
+    /// Reverses the aggregated data. Used for reversing the list.
+    fn reverse(self) -> Self;
 }
 
 impl AggregatedData for () {
@@ -17,6 +20,9 @@ impl AggregatedData for () {
         ()
     }
     fn merge(self, _: Self) -> Self {
+        ()
+    }
+    fn reverse(self) -> Self {
         ()
     }
 }
@@ -106,7 +112,7 @@ where
     }
     /// Find an element in the list containing u using a search strategy.
     fn find_element(
-        &mut self,
+        &self,
         u: Idx,
         search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx;
@@ -119,11 +125,16 @@ where
     /// Size of the list containing u.
     fn len(&self, u: Idx) -> usize;
     /// Aggregated data of the list containing u.
-    fn total_agg(&mut self, u: Idx) -> Ag {
+    fn total_agg(&self, u: Idx) -> Ag {
         self.range_agg(u, ..)
     }
     /// Aggregated data of a range of the list containing u. (0-indexed)
-    fn range_agg(&mut self, u: Idx, range: impl RangeBounds<usize>) -> Ag;
+    fn range_agg(&self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
+        let [l, r] = range_to_lr(range, || self.len(u));
+        self.range_agg_lr(u, l, r)
+    }
+    /// XXX: Use range_agg(u, l..r) instead.
+    fn range_agg_lr(&self, u: Idx, l: usize, r: usize) -> Ag;
 
     /// Concats the lists containing u and v. Returns the new root.
     fn concat(&mut self, u: Idx, v: Idx) -> Idx;
@@ -136,21 +147,26 @@ where
     }
     /// Splits the list containing u with the given range from the left and right parts. Returns (left, range, right), which may be EMPTY.
     fn split(&mut self, u: Idx, range: impl RangeBounds<usize>) -> (Idx, Idx, Idx) {
-        use std::ops::Bound::*;
-        let start = match range.start_bound() {
-            Included(start) => *start,
-            Excluded(start) => *start + 1,
-            Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            Included(end) => *end + 1,
-            Excluded(end) => *end,
-            Unbounded => self.len(u),
-        };
-        self.split_lr(u, start, end)
+        let [l, r] = range_to_lr(range, || self.len(u));
+        self.split_lr(u, l, r)
     }
-    /// Split with given (inclusive, exclusive( range.
+    /// XXX: Use range_agg(u, l..r) instead.
     fn split_lr(&mut self, u: Idx, l: usize, r: usize) -> (Idx, Idx, Idx);
     /// Reverse the whole list containing u.
     fn reverse(&mut self, u: Idx);
+}
+
+fn range_to_lr(range: impl RangeBounds<usize>, len: impl FnOnce() -> usize) -> [usize; 2] {
+    use std::ops::Bound::*;
+    let start = match range.start_bound() {
+        Included(start) => *start,
+        Excluded(start) => *start + 1,
+        Unbounded => 0,
+    };
+    let end = match range.end_bound() {
+        Included(end) => *end + 1,
+        Excluded(end) => *end,
+        Unbounded => len(),
+    };
+    [start, end]
 }

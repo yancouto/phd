@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::RangeBounds};
+use std::fmt::Debug;
 
 use dynamic_2core::lists::*;
 
@@ -90,13 +90,13 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
     }
 
     fn find_element(
-        &mut self,
+        &self,
         u: Idx,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
         let left_agg = Ag::default();
         use SearchDirection::*;
-        for i in (0..self.list(u).len()) {
+        for i in 0..self.list(u).len() {
             let right_agg = self.range_agg(u, i + 1..);
             let e = &self.list(u)[i];
             match search_strategy(SearchData {
@@ -124,11 +124,12 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         self.list(u).len()
     }
 
-    fn range_agg(&mut self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
+    fn range_agg_lr(&self, u: Idx, l: usize, r: usize) -> Ag {
         self.list(u)
             .iter()
             .enumerate()
-            .filter_map(|(i, d)| range.contains(&i).then(|| &d.data))
+            .filter(|(i, _)| *i >= l && *i < r)
+            .map(|(_, d)| &d.data)
             .fold(Ag::default(), |agg, data| agg.merge(Ag::from(data)))
     }
 
