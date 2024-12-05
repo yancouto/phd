@@ -4,7 +4,7 @@ use dynamic_2core::lists::*;
 
 /// Dummy implementation, most of the operations take linear time.
 #[derive(Clone)]
-pub struct SlowLists<Ag: AggregatedData> {
+pub struct SlowLists<Ag: AggregatedData = ()> {
     lists: Vec<Vec<Entry<Ag>>>,
     u_to_list: Vec<usize>,
 }
@@ -185,5 +185,10 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
             self.lists[ig + 1].get(0).map_or(Self::EMPTY, |e| e.idx),
             self.lists[lu].get(0).map_or(Self::EMPTY, |e| e.idx),
         )
+    }
+
+    fn reverse(&mut self, u: Idx) {
+        let l = self.u_to_list[u];
+        self.lists[l].reverse();
     }
 }

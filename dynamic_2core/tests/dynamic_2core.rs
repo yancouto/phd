@@ -7,6 +7,7 @@ use common::{init_logger, slow_lct::SlowLCT, slow_lists::SlowLists};
 use dynamic_2core::{
     dynamic_2core::{AgData, D2CSolver, Dynamic2CoreSolver},
     euler_tour_tree::ETAggregated,
+    link_cut_tree::LCT,
 };
 
 mod common;
@@ -281,16 +282,27 @@ fn test_slow() {
 }
 
 #[test]
+fn test_mid_lct() {
+    init_logger();
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::test_all();
+}
+
+#[test]
 fn test_cmp1() {
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(9232345);
+    init_logger();
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
+        9232345,
+    );
 }
 #[test]
 fn test_cmp2() {
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(100000007);
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
+        100000007,
+    );
 }
 #[test]
 fn test_cmp3() {
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(3);
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(3);
 }
 
 fn stress() {
@@ -298,7 +310,9 @@ fn stress() {
     loop {
         let seed: u64 = thread_rng().gen();
         log::info!("seed = {seed}");
-        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(seed);
+        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
+            seed,
+        );
     }
 }
 

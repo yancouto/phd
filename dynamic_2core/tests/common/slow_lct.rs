@@ -5,20 +5,20 @@ pub struct SlowLCT {
     parent: Vec<usize>,
 }
 
-impl SlowLCT {
-    fn root(&self, u: Node) -> Node {
-        if self.parent[u] == u {
-            u
-        } else {
-            self.root(self.parent[u])
-        }
-    }
-}
+impl SlowLCT {}
 
 impl LinkCutTree for SlowLCT {
     fn new(n: usize) -> Self {
         Self {
             parent: (0..n).collect(),
+        }
+    }
+
+    fn root(&mut self, u: Node) -> Node {
+        if self.parent[u] == u {
+            u
+        } else {
+            self.root(self.parent[u])
         }
     }
 
@@ -46,7 +46,7 @@ impl LinkCutTree for SlowLCT {
         }
     }
 
-    fn kth_in_path_from_root(&self, u: Node, k: usize) -> Option<Node> {
+    fn kth_in_path_from_root(&mut self, u: Node, k: usize) -> Option<Node> {
         let mut path = vec![u];
         let mut last = u;
         while self.parent[last] != last {

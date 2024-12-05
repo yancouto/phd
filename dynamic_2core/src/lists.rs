@@ -9,6 +9,16 @@ pub trait AggregatedData: Debug + Sized + Clone + Default {
     fn merge(self, right: Self) -> Self;
 }
 
+impl AggregatedData for () {
+    type Data = ();
+    fn from(_: &Self::Data) -> Self {
+        ()
+    }
+    fn merge(self, _: Self) -> Self {
+        ()
+    }
+}
+
 #[derive(Debug)]
 pub struct SearchData<'a, Ag: AggregatedData> {
     /// Data of the current node being looked at.
@@ -30,7 +40,7 @@ pub enum SearchDirection {
 pub type Idx = usize;
 
 /// This stores multiple ordered lists of values. Use keys in 0..n.
-pub trait Lists<Ag>
+pub trait Lists<Ag = ()>
 where
     Ag: AggregatedData,
     Self: Sized + Debug,
@@ -70,9 +80,15 @@ where
     fn is_first(&self, u: Idx) -> bool {
         self.order(u) == 0
     }
+    fn is_last(&self, u: Idx) -> bool {
+        self.order(u) == self.len(u) - 1
+    }
     /// Next node after u in its list.
     fn next(&self, u: Idx) -> Idx {
         self.find_kth(self.root(u), self.order(u) + 1)
+    }
+    fn prev(&self, u: Idx) -> Idx {
+        self.find_kth(self.root(u), self.order(u) - 1)
     }
     /// Are the two nodes on the same tree?
     fn on_same_list(&self, u: Idx, v: Idx) -> bool {
@@ -118,4 +134,6 @@ where
     }
     /// Splits the list containing u with the given range from the left and right parts. Returns (left, range, right), which may be EMPTY.
     fn split(&mut self, u: Idx, range: impl RangeBounds<usize>) -> (Idx, Idx, Idx);
+    /// Reverse the whole list containing u.
+    fn reverse(&mut self, u: Idx);
 }
