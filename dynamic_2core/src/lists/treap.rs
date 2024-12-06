@@ -1,16 +1,44 @@
+use std::fmt::{Debug, Formatter};
+
+use debug_tree::TreeBuilder;
+use derivative::Derivative;
 use rand::{rngs, Rng, SeedableRng};
 
 use super::{AggregatedData, Idx, Lists, SearchData, SearchDirection};
 
-#[derive(Debug)]
+fn node_fmt(u: &Idx, f: &mut Formatter) -> std::fmt::Result {
+    if *u == usize::MAX {
+        write!(f, "∅")
+    } else {
+        write!(f, "{u}")
+    }
+}
+fn node2_fmt([u, v]: &[Idx; 2], f: &mut Formatter) -> std::fmt::Result {
+    write!(f, "[")?;
+    node_fmt(u, f)?;
+    write!(f, ", ")?;
+    node_fmt(v, f)?;
+    write!(f, "]")
+}
+
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct Node<Ag: AggregatedData> {
-    ag_data: Ag,
-    data: Ag::Data,
-    child: [Idx; 2],
+    #[derivative(Debug(format_with = "node_fmt"))]
     parent: Idx,
-    size: usize,
-    priority: u32,
+    #[derivative(Debug(format_with = "node2_fmt"))]
+    /// Left and right child
+    child: [Idx; 2],
+    /// This nodes children and aggregated data should be flipped.
     flip_subtree: bool,
+    /// Data for this node
+    data: Ag::Data,
+    /// Aggregated data for this node's subtree
+    ag_data: Ag,
+    #[derivative(Debug = "ignore")]
+    priority: u32,
+    #[derivative(Debug = "ignore")]
+    size: usize,
 }
 
 impl<Ag: AggregatedData> Node<Ag> {
@@ -30,13 +58,38 @@ impl<Ag: AggregatedData> Node<Ag> {
     }
 }
 
-#[derive(Debug)]
 pub struct Treaps<Ag: AggregatedData> {
     nodes: Vec<Node<Ag>>,
     rng: rngs::StdRng,
 }
 
+impl<Ag: AggregatedData> Debug for Treaps<Ag> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let mut builder = TreeBuilder::new();
+        let _b = builder.add_branch("Treaps");
+        for u in &self.nodes {
+            if u.parent == Self::EMPTY {
+                self.tree_dbg(u, &mut builder);
+            }
+        }
+        writeln!(f, "{}", builder.string())
+    }
+}
+
 impl<Ag: AggregatedData> Treaps<Ag> {
+    fn tree_dbg(&self, u: &Node<Ag>, tree: &mut TreeBuilder) {
+        let _b = tree.add_branch(&format!("{u:?}"));
+        if u.child == [Self::EMPTY, Self::EMPTY] {
+            return;
+        }
+        for c in u.child {
+            if c != Self::EMPTY {
+                self.tree_dbg(&self.nodes[c], tree);
+            } else {
+                tree.add_leaf("<no edge>");
+            }
+        }
+    }
     fn n(&self, u: Idx) -> Option<&Node<Ag>> {
         // Even safer than just self.nodes.get(u)
         if u == Self::EMPTY {

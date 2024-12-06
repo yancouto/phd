@@ -74,8 +74,9 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.range_agg(0, 1..4), 12);
         assert_eq!(l.range_agg(0, 4..), 11);
         assert_eq!(l.range_agg(0, 0..0), 0);
+        log::info!("Before split {l:#?}");
         let (left, mid, right) = l.split(0, 1..=3);
-        assert_eq!(l.total_agg(left), 1, "{l:?}");
+        assert_eq!(l.total_agg(left), 1, "left = {left} list = {l:#?}");
         assert_eq!(l.total_agg(mid), 12, "l = {l:?}");
         assert_eq!(l.total_agg(right), 11);
         Self::assert_data(&l, left, &[1]);
