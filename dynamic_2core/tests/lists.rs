@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
-use common::{init_logger, slow_lists::SlowLists, AggSum};
+use common::{init_logger, slow_lists::SlowLists, AggDigit, AggSum};
 use debug_tree::{add_branch_to, default_tree};
 use dynamic_2core::lists::*;
+use rand::{Rng, SeedableRng};
 use scopeguard::{OnUnwind, ScopeGuard};
 use treap::Treaps;
 
@@ -13,11 +14,31 @@ use dynamic_2core::lists::treap::PrettyIdx as I;
 
 struct LTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
 
+fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data: &[i32]) {
+    add_branch_to!("test", "assert_data({u} = {data:?})");
+    default_tree().peek_print();
+    assert_eq!(l.len(u), data.len(), "{l:?}");
+    let mut cur_u = l.first(u);
+    assert!(l.is_first(cur_u));
+    for i in 0..data.len() {
+        assert_eq!(cur_u, l.find_kth(u, i));
+        assert_eq!(l.data(cur_u), &data[i], "element {i} is incorrect");
+        if i == data.len() - 1 {
+            assert!(l.is_last(cur_u));
+        }
+        cur_u = l.next(cur_u);
+    }
+    assert!(l.is_empty(cur_u));
+}
+
+fn guard<L: std::fmt::Debug>(l: L) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
+    scopeguard::guard_on_unwind(l, |l| log::error!("Crash with {l:?}"))
+}
+
 impl<L: Lists<AggSum>> LTests<L> {
     fn build(v: &[i32]) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
         add_branch_to!("test", "build({v:?})");
-        let l = L::from_iter(v.iter().copied());
-        let l = scopeguard::guard_on_unwind(l, |l| log::error!("Crash with {l:?}"));
+        let l = guard(L::from_iter(v.iter().copied()));
         Self::assert_data(&l, 0, v);
         l
     }
@@ -37,12 +58,7 @@ impl<L: Lists<AggSum>> LTests<L> {
     }
 
     fn assert_data(l: &L, u: usize, data: &[i32]) {
-        add_branch_to!("test", "assert_data({u} = {data:?})");
-        default_tree().peek_print();
-        assert_eq!(l.len(u), data.len(), "{l:?}");
-        for i in 0..data.len() {
-            assert_eq!(l.data(l.find_kth(u, i)), &data[i]);
-        }
+        assert_data(l, u, data)
     }
 
     fn assert_conn(l: &L, lists: &[&[usize]]) {
@@ -178,6 +194,31 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.range_agg(r, 2..), 4);
     }
 
+    fn test_find_element() {
+        let l = Self::build(&[0, 0, 1, 0, 3, 0, 2, 0, 1, 1000]);
+        let idx_of_kth_value = |k: i32| {
+            l.find_element(0, move |s: SearchData<'_, AggSum>| {
+                if s.left_agg.0 >= k {
+                    SearchDirection::Left
+                } else if s.left_agg.0 + s.current_data >= k {
+                    SearchDirection::Found
+                } else {
+                    SearchDirection::Right
+                }
+            })
+        };
+        assert_eq!(idx_of_kth_value(1), 2);
+        assert_eq!(idx_of_kth_value(2), 4);
+        assert_eq!(idx_of_kth_value(3), 4);
+        assert_eq!(idx_of_kth_value(4), 4);
+        assert_eq!(idx_of_kth_value(5), 6);
+        assert_eq!(idx_of_kth_value(6), 6);
+        assert_eq!(idx_of_kth_value(7), 8);
+        assert_eq!(idx_of_kth_value(8), 9);
+        assert_eq!(idx_of_kth_value(255), 9);
+        assert_eq!(idx_of_kth_value(100000), L::EMPTY);
+    }
+
     fn test_all() {
         Self::test_new_empty();
         Self::test_new();
@@ -186,12 +227,74 @@ impl<L: Lists<AggSum>> LTests<L> {
         Self::test_same_as_not_content();
         Self::test_dsu();
         Self::test_change_data();
+        Self::test_find_element();
     }
+}
+
+#[allow(non_snake_case)]
+fn random_compare_with_slow<L, Ag>(Q: usize, N: usize, seed: u64)
+where
+    Ag: AggregatedData<Data = i32>,
+    L: Lists<Ag>,
+{
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let mut l = L::new(N);
+    let mut slow = SlowLists::<Ag>::new(N);
+    for i in 0..N {
+        assert_eq!(i, l.create(i as i32));
+        slow.create(i as i32);
+    }
+    for q in 0..Q {
+        if q % 100 == 0 {
+            log::info!("q {q}");
+        }
+        let roots = slow.roots();
+        match rng.gen_range(0..100) {
+            // split
+            // concat
+            // reverse
+            _ => todo!(),
+        }
+    }
+}
+
+fn test_digits<L: Lists<AggDigit>>() {
+    init_logger();
+    let mut t = guard(L::from_iter([0, 1, 2, 3, 4, 5, 6, 7].into_iter()));
+    assert_eq!(t.total_agg(0), 1234567);
+    assert_eq!(t.range_agg(0, 3..=5), 345);
+    assert_eq!(t.range_agg(0, 2..7), 23456);
+    t.reverse(0);
+    assert_eq!(t.total_agg(0), 76543210);
+    assert_eq!(t.range_agg(0, 3..=5), 432);
+    assert_eq!(t.range_agg(0, 2..7), 54321);
+    t.reverse(0);
+    assert_eq!(t.range_agg(0, 3..=6), 3456);
+    t.split(0, 2..=4);
+    t.reverse(0);
+    assert_eq!(t.total_agg(0), 10);
+    t.concat(0, 2);
+    assert_data(&*t, 0, &[1, 0, 2, 3, 4]);
+    assert_eq!(t.range_agg(0, 1..=3), 23);
+    assert_eq!(t.range_agg(0, 0..=2), 102);
+    t.reverse(0);
+    assert_data(&*t, 0, &[4, 3, 2, 0, 1]);
+    assert_eq!(t.range_agg(0, 1..=2), 32);
+    t.concat(5, 0);
+    assert_data(&*t, 0, &[5, 6, 7, 4, 3, 2, 0, 1]);
+    assert_eq!(t.range_agg(0, 1..=3), 674);
+    assert_eq!(t.range_agg(0, 0..7), 5674320);
+    let (l, m, r) = t.split(0, 2..=4);
+    assert_data(&*t, l, &[5, 6]);
+    assert_data(&*t, m, &[7, 4, 3]);
+    assert_data(&*t, r, &[2, 0, 1]);
 }
 
 #[test]
 fn test_slow_lists() {
+    init_logger();
     LTests::<SlowLists<AggSum>>::test_all();
+    test_digits::<SlowLists<AggDigit>>();
 }
 
 #[test]
@@ -199,4 +302,18 @@ fn test_treap() {
     init_logger();
     //defer_print!("test");
     LTests::<Treaps<AggSum>>::test_all();
+    test_digits::<Treaps<AggDigit>>();
+}
+
+#[test]
+fn test_treap_cmp1() {
+    random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, 2012);
+}
+#[test]
+fn test_treap_cmp2() {
+    random_compare_with_slow::<Treaps<AggSum>, _>(1000, 1000, 74828);
+}
+#[test]
+fn test_treap_cmp3() {
+    random_compare_with_slow::<Treaps<AggDigit>, _>(10000, 8, 4635);
 }

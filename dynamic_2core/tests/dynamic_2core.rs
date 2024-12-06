@@ -8,6 +8,7 @@ use dynamic_2core::{
     dynamic_2core::{AgData, D2CSolver, Dynamic2CoreSolver},
     euler_tour_tree::ETAggregated,
     link_cut_tree::LCT,
+    lists::treap::Treaps,
 };
 
 mod common;
@@ -282,27 +283,36 @@ fn test_slow() {
 }
 
 #[test]
-fn test_mid_lct() {
+fn test_lct_with_slow() {
     init_logger();
     D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::test_all();
 }
 
 #[test]
-fn test_cmp1() {
+fn test_lct_with_treap() {
+    init_logger();
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::test_all();
+}
+
+#[test]
+fn test_cmp_slow() {
     init_logger();
     D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
         9232345,
     );
 }
 #[test]
+fn test_cmp1() {
+    init_logger();
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(9232345);
+}
+#[test]
 fn test_cmp2() {
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
-        100000007,
-    );
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(100000007);
 }
 #[test]
 fn test_cmp3() {
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(3);
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(3);
 }
 
 fn stress() {
@@ -310,9 +320,7 @@ fn stress() {
     loop {
         let seed: u64 = thread_rng().gen();
         log::info!("seed = {seed}");
-        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
-            seed,
-        );
+        D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(seed);
     }
 }
 
@@ -328,6 +336,6 @@ fn test_stress0(b: &mut test::Bencher) {
     b.iter(|| {
         let seed: u64 = thread_rng().gen();
         log::info!("seed = {seed}");
-        D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, SlowLCT>>::compare_with_dumb(seed);
+        D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(seed);
     })
 }

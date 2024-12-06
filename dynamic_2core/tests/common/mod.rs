@@ -31,6 +31,47 @@ impl PartialEq<i32> for AggSum {
     }
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct AggDigit {
+    number: i32,
+    size: u8,
+}
+
+impl AggregatedData for AggDigit {
+    type Data = i32;
+
+    fn from(&data: &Self::Data) -> Self {
+        assert!(data >= 0 && data < 10);
+        Self {
+            number: data,
+            size: 1,
+        }
+    }
+
+    fn merge(self, right: Self) -> Self {
+        Self {
+            number: self.number * 10_i32.pow(right.size.into()) + right.number,
+            size: self.size + right.size,
+        }
+    }
+
+    fn reverse(mut self) -> Self {
+        let mut new_number = 0;
+        for _ in 0..self.size {
+            new_number = new_number * 10 + (self.number % 10);
+            self.number /= 10;
+        }
+        self.number = new_number;
+        self
+    }
+}
+
+impl PartialEq<i32> for AggDigit {
+    fn eq(&self, &other: &i32) -> bool {
+        self.number == other
+    }
+}
+
 #[allow(dead_code)]
 pub static LOGGER: LazyLock<Mutex<LoggerHandle>> = LazyLock::new(|| {
     Mutex::new(

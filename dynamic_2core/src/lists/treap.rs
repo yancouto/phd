@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Display, Formatter};
 
-use debug_tree::{add_branch, add_branch_to, add_leaf, add_leaf_to, defer, TreeBuilder};
+use debug_tree::{
+    add_branch, add_branch_to, add_leaf, add_leaf_to, defer, defer_print, AsTree, TreeBuilder,
+};
 use derivative::Derivative;
 use rand::{rngs, Rng, SeedableRng};
 
@@ -74,7 +76,7 @@ impl<Ag: AggregatedData> Node<Ag> {
     }
 }
 
-pub struct Treaps<Ag: AggregatedData> {
+pub struct Treaps<Ag: AggregatedData = ()> {
     nodes: Vec<Node<Ag>>,
     rng: rngs::StdRng,
 }
@@ -85,16 +87,30 @@ impl<Ag: AggregatedData> Debug for Treaps<Ag> {
         let _b = builder.add_branch("Treaps");
         for u in 0..self.nodes.len() {
             if self.nodes[u].parent == Self::EMPTY {
-                self.tree_inorder_dbg(u, &builder);
+                self.tree_preorder_dbg(u, &builder);
             }
         }
         writeln!(f, "{}", builder.string())
     }
 }
 
+trait ReverseF: AggregatedData {
+    fn reverseif(self, flipped: bool) -> Self;
+}
+
+impl<T: AggregatedData> ReverseF for T {
+    fn reverseif(self, flipped: bool) -> Self {
+        if flipped {
+            self.reverse()
+        } else {
+            self
+        }
+    }
+}
+
 impl<Ag: AggregatedData> Treaps<Ag> {
     #[allow(dead_code)]
-    fn tree_preorder_dbg(&self, u: Idx, tree: &TreeBuilder) {
+    fn tree_preorder_dbg<T: AsTree>(&self, u: Idx, tree: &T) {
         let nu = &self.nodes[u];
         add_branch_to!(*tree, "[{u}] {nu:?}");
         if nu.child == [Self::EMPTY, Self::EMPTY] {
@@ -109,10 +125,10 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         }
     }
     #[allow(dead_code)]
-    fn tree_inorder_dbg(&self, u: Idx, tree: &TreeBuilder) {
+    fn tree_inorder_dbg<T: AsTree>(&self, u: Idx, tree: &T) {
         let nu = &self.nodes[u];
         if nu.child[0] != Self::EMPTY {
-            let _b = tree.add_branch(&format!("left child of {u}"));
+            add_branch_to!(*tree, "left child of {u}");
             self.tree_inorder_dbg(nu.child[0], tree);
         }
         add_branch_to!(*tree, "[{u}] {nu:?}");
@@ -134,6 +150,15 @@ impl<Ag: AggregatedData> Treaps<Ag> {
                 [n.child[1], n.child[0]]
             } else {
                 n.child
+            }
+        })
+    }
+    fn range(&self, u: Idx, ql: usize, qr: usize) -> [usize; 2] {
+        self.n(u).map_or([ql, qr], |n| {
+            if n.flip_subtree {
+                [n.size - qr, n.size - ql]
+            } else {
+                [ql, qr]
             }
         })
     }
@@ -192,6 +217,19 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         self.nodes[u].ag_data = ag;
         u
     }
+    fn unlaze_flip(&mut self, u: Idx) {
+        let n = &mut self.nodes[u];
+        if n.flip_subtree {
+            n.flip_subtree = false;
+            n.ag_data = n.ag_data.clone().reverse();
+            n.child.swap(0, 1);
+            for c in n.child {
+                if c != Self::EMPTY {
+                    self.nodes[c].flip_subtree ^= true;
+                }
+            }
+        }
+    }
     /// (First k, rest)
     fn split_k(&mut self, u: Idx, k: usize, flipped: bool) -> (Idx, Idx) {
         if u == Self::EMPTY || k == 0 {
@@ -217,7 +255,14 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         }
     }
     fn concat_inner(&mut self, u: Idx, v: Idx) -> Idx {
-        add_branch!("concat({u}, {v})", u = I(u), v = I(v));
+        let u_greater = self.nodes.get(u).map_or(0, |n| n.priority)
+            > self.nodes.get(v).map_or(0, |n| n.priority);
+        add_branch!(
+            "concat({u}, {v}) bigger pri {c}",
+            u = I(u),
+            v = I(v),
+            c = I(u_greater.then_some(u).unwrap_or(v)),
+        );
         if u == Self::EMPTY {
             add_leaf!("Return {v}");
             return v;
@@ -226,21 +271,21 @@ impl<Ag: AggregatedData> Treaps<Ag> {
             return u;
         }
         let r = if self.nodes[u].priority > self.nodes[v].priority {
+            self.unlaze_flip(u);
             let old_r = self.change_right(u, Self::EMPTY, false);
             let new_r = self.concat_inner(old_r, v);
-            self.nodes[new_r].flip_subtree ^= self.nodes[u].flip_subtree;
             self.change_right(u, new_r, false);
             u
         } else {
+            self.unlaze_flip(v);
             let old_l = self.change_left(v, Self::EMPTY, false);
             let new_l = self.concat_inner(u, old_l);
-            self.nodes[new_l].flip_subtree ^= self.nodes[v].flip_subtree;
             self.change_left(v, new_l, false);
             v
         };
         let mut t = TreeBuilder::new();
         let _b = t.add_branch(&format!("Before calc({u}, {v}) returns {r}"));
-        self.tree_inorder_dbg(r, &mut t);
+        self.tree_preorder_dbg(r, &mut t);
         log::info!("{}", t.string());
 
         add_leaf!("Return {r}");
@@ -253,27 +298,21 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         if ql == 0 && qr >= self.size(u) {
             return self.ag_data(u, false);
         }
-        let f = self.nodes[u].flip_subtree;
-        let [l, r] = self.child(u, false);
+        let [ql, qr] = self.range(u, ql, qr);
+        let [l, r] = self.nodes[u].child;
         let szl = self.size(l);
         let mut ag = Ag::default();
         if ql < szl {
             ag = self.range_agg_lr_inner(l, ql, qr.min(szl));
-            if f {
-                ag = ag.reverse();
-            }
         }
         if ql <= szl && qr > szl {
             ag = ag.merge(Ag::from(&self.nodes[u].data));
         }
         if qr > szl + 1 {
-            let mut rag = self.range_agg_lr_inner(r, ql.saturating_sub(szl + 1), qr - (szl + 1));
-            if f {
-                rag = rag.reverse();
-            }
+            let rag = self.range_agg_lr_inner(r, ql.saturating_sub(szl + 1), qr - (szl + 1));
             ag = ag.merge(rag);
         }
-        ag
+        ag.reverseif(self.nodes[u].flip_subtree)
     }
 }
 
@@ -391,8 +430,22 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
 
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
         defer!(|t| log::info!("{}", t.string()));
-        add_branch!("Concat {u} {v}");
+        add_branch!("Concat {u} {v}", u = I(u), v = I(v));
         let (u, v) = (self.root(u), self.root(v));
+        if u == v {
+            return u;
+        }
+        if u != Self::EMPTY {
+            defer_print!("TU");
+            add_branch_to!("TU", "u = ");
+            self.tree_preorder_dbg(u, &"TU");
+        }
+        if v != Self::EMPTY {
+            defer_print!("TV");
+            add_branch_to!("TV", "v = ");
+            self.tree_preorder_dbg(v, &"TV");
+        }
+
         self.concat_inner(u, v)
     }
 
