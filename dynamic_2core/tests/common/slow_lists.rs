@@ -77,12 +77,12 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         &self.entry(u).data
     }
 
-    fn data_mut(&mut self, u: Idx) -> &mut Ag::Data {
-        &mut self.lists[self.u_to_list[u]]
+    fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data)) {
+        f(&mut self.lists[self.u_to_list[u]]
             .iter_mut()
             .find(|e| e.idx == u)
             .unwrap()
-            .data
+            .data)
     }
 
     fn order(&self, u: Idx) -> usize {

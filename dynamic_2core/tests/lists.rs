@@ -1,34 +1,64 @@
+use std::collections::BTreeMap;
+
 use common::{init_logger, slow_lists::SlowLists, AggSum};
+use debug_tree::{add_branch_to, default_tree};
 use dynamic_2core::lists::*;
+use scopeguard::{OnUnwind, ScopeGuard};
 use treap::Treaps;
 
 mod common;
 
+#[allow(unused_imports)]
+use dynamic_2core::lists::treap::PrettyIdx as I;
+
 struct LTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
 
 impl<L: Lists<AggSum>> LTests<L> {
-    fn build(v: &[i32]) -> L {
+    fn build(v: &[i32]) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
+        add_branch_to!("test", "build({v:?})");
         let l = L::from_iter(v.iter().copied());
+        let l = scopeguard::guard_on_unwind(l, |l| log::error!("Crash with {l:?}"));
         Self::assert_data(&l, 0, v);
         l
     }
     fn add_list(l: &mut L, v: &[i32]) -> Idx {
+        add_branch_to!("test", "add_list({v:?})");
         let u = l.total_size();
-        for (i, vi) in v.iter().enumerate() {
-            let r = l.create(*vi);
+        let mut last_root = u;
+        for (i, &vi) in v.iter().enumerate() {
+            let r = l.create(vi);
             assert_eq!(r, u + i);
             if i > 0 {
-                l.concat(u + i - 1, u + i);
+                last_root = l.concat(u + i - 1, u + i);
             }
         }
-        Self::assert_data(&l, u, v);
+        Self::assert_data(&l, last_root, v);
         u
     }
 
     fn assert_data(l: &L, u: usize, data: &[i32]) {
+        add_branch_to!("test", "assert_data({u} = {data:?})");
+        default_tree().peek_print();
         assert_eq!(l.len(u), data.len(), "{l:?}");
         for i in 0..data.len() {
             assert_eq!(l.data(l.find_kth(u, i)), &data[i]);
+        }
+    }
+
+    fn assert_conn(l: &L, lists: &[&[usize]]) {
+        let u_to_li: BTreeMap<usize, usize> = lists
+            .iter()
+            .enumerate()
+            .flat_map(|(i, li)| li.iter().copied().zip(std::iter::repeat(i)))
+            .collect();
+        for (&u, &u_list) in &u_to_li {
+            for (&v, &v_list) in &u_to_li {
+                assert_eq!(
+                    l.on_same_list(u, v),
+                    u_list == v_list,
+                    "u {u} v {v}\n{u_to_li:?}\n{l:?}"
+                );
+            }
         }
     }
 
@@ -74,22 +104,13 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.range_agg(0, 1..4), 12);
         assert_eq!(l.range_agg(0, 4..), 11);
         assert_eq!(l.range_agg(0, 0..0), 0);
-        log::info!("Before split {l:#?}");
         let (left, mid, right) = l.split(0, 1..=3);
-        assert_eq!(l.total_agg(left), 1, "left = {left} list = {l:#?}");
-        assert_eq!(l.total_agg(mid), 12, "l = {l:?}");
+        assert_eq!(l.total_agg(left), 1);
+        assert_eq!(l.total_agg(mid), 12);
         assert_eq!(l.total_agg(right), 11);
         Self::assert_data(&l, left, &[1]);
         Self::assert_data(&l, mid, &[2, 3, 7]);
         Self::assert_data(&l, right, &[9, 2]);
-    }
-
-    #[allow(dead_code)]
-    fn dbg(l: &L, u: usize) {
-        for i in 0..l.len(u) {
-            print!("{:?} ", l.data(l.find_kth(u, i)));
-        }
-        println!();
     }
 
     fn test_same_as_not_content() {
@@ -108,29 +129,30 @@ impl<L: Lists<AggSum>> LTests<L> {
     fn test_dsu() {
         let mut l = L::new(4);
         for i in 0..4 {
-            l.create(i + 1);
+            l.create(i);
         }
-        assert!(!l.on_same_list(0, 1));
-        assert!(!l.on_same_list(0, 2));
-        assert!(!l.on_same_list(0, 3));
+        Self::assert_conn(&l, &[&[0], &[1], &[2], &[3]]);
         let root1 = l.concat(0, 1);
         let root2 = l.concat(2, 3);
         assert!(l.on_same_list(root1, 1));
         assert!(!l.on_same_list(root1, root2));
         assert!(l.on_same_list(root2, 3));
         assert!(!l.on_same_list(1, root2));
-        assert!(!l.on_same_list(1, 3));
+        Self::assert_conn(&l, &[&[0, 1], &[2, 3]]);
         let root = l.concat(root1, root2);
         assert!(l.on_same_list(root, root2));
         assert!(l.on_same_list(root, 3));
         assert!(l.on_same_list(root, 3));
         assert!(l.on_same_list(root, root2));
-        Self::assert_data(&l, root2, &[1, 2, 3, 4]);
+        Self::assert_conn(&l, &[&[0, 1, 2, 3]]);
+        Self::assert_data(&l, root2, &[0, 1, 2, 3]);
         let (_, m, _) = l.split(root, 0..=1);
         assert!(!l.on_same_list(m, root2));
+        Self::assert_conn(&l, &[&[0, 1], &[2, 3]]);
         let root = l.concat(root2, m);
+        Self::assert_conn(&l, &[&[0, 1, 2, 3]]);
         assert!(l.on_same_list(root, 3));
-        Self::assert_data(&l, root, &[3, 4, 1, 2]);
+        Self::assert_data(&l, root, &[2, 3, 0, 1]);
     }
 
     fn test_change_data() {
@@ -140,16 +162,16 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.range_agg(r, 1..), 6);
         let node = l.find_kth(r, 1);
         assert_eq!(node, 1);
-        *l.data_mut(node) = 10;
+        l.mutate_data(node, |d| *d = 10);
         Self::assert_data(&l, r, &[1, 10, 4]);
         assert_eq!(l.total_agg(r), 15);
         assert_eq!(l.range_agg(r, 1..), 14);
-        *l.data_mut(r) = 100;
+        l.mutate_data(r, |d| *d = 100);
         Self::assert_data(&l, r, &[100, 10, 4]);
         assert_eq!(l.total_agg(r), 114);
         assert_eq!(l.range_agg(r, 1..), 14);
         let node = l.find_kth(r, 1);
-        *l.data_mut(node) = 1000;
+        l.mutate_data(node, |d| *d = 1000);
         Self::assert_data(&l, r, &[100, 1000, 4]);
         assert_eq!(l.total_agg(r), 1104);
         assert_eq!(l.range_agg(r, 1..), 1004);
@@ -175,5 +197,6 @@ fn test_slow_lists() {
 #[test]
 fn test_treap() {
     init_logger();
+    //defer_print!("test");
     LTests::<Treaps<AggSum>>::test_all();
 }

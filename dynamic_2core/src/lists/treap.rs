@@ -1,6 +1,6 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
-use debug_tree::TreeBuilder;
+use debug_tree::{add_branch, add_branch_to, add_leaf, add_leaf_to, defer, TreeBuilder};
 use derivative::Derivative;
 use rand::{rngs, Rng, SeedableRng};
 
@@ -21,13 +21,30 @@ fn node2_fmt([u, v]: &[Idx; 2], f: &mut Formatter) -> std::fmt::Result {
     write!(f, "]")
 }
 
+/// Used to pretty print a Idx, outputting ∅ if it is EMPTY.
+pub struct PrettyIdx(pub Idx);
+
+impl Display for PrettyIdx {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        node_fmt(&self.0, f)
+    }
+}
+
+impl Debug for PrettyIdx {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        <Self as Display>::fmt(self, f)
+    }
+}
+
+use PrettyIdx as I;
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 struct Node<Ag: AggregatedData> {
     #[derivative(Debug(format_with = "node_fmt"))]
     parent: Idx,
-    #[derivative(Debug(format_with = "node2_fmt"))]
     /// Left and right child
+    #[derivative(Debug(format_with = "node2_fmt"))]
     child: [Idx; 2],
     /// This nodes children and aggregated data should be flipped.
     flip_subtree: bool,
@@ -35,10 +52,9 @@ struct Node<Ag: AggregatedData> {
     data: Ag::Data,
     /// Aggregated data for this node's subtree
     ag_data: Ag,
+    size: usize,
     #[derivative(Debug = "ignore")]
     priority: u32,
-    #[derivative(Debug = "ignore")]
-    size: usize,
 }
 
 impl<Ag: AggregatedData> Node<Ag> {
@@ -65,11 +81,11 @@ pub struct Treaps<Ag: AggregatedData> {
 
 impl<Ag: AggregatedData> Debug for Treaps<Ag> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let mut builder = TreeBuilder::new();
+        let builder = TreeBuilder::new();
         let _b = builder.add_branch("Treaps");
-        for u in &self.nodes {
-            if u.parent == Self::EMPTY {
-                self.tree_dbg(u, &mut builder);
+        for u in 0..self.nodes.len() {
+            if self.nodes[u].parent == Self::EMPTY {
+                self.tree_inorder_dbg(u, &builder);
             }
         }
         writeln!(f, "{}", builder.string())
@@ -77,17 +93,31 @@ impl<Ag: AggregatedData> Debug for Treaps<Ag> {
 }
 
 impl<Ag: AggregatedData> Treaps<Ag> {
-    fn tree_dbg(&self, u: &Node<Ag>, tree: &mut TreeBuilder) {
-        let _b = tree.add_branch(&format!("{u:?}"));
-        if u.child == [Self::EMPTY, Self::EMPTY] {
+    #[allow(dead_code)]
+    fn tree_preorder_dbg(&self, u: Idx, tree: &TreeBuilder) {
+        let nu = &self.nodes[u];
+        add_branch_to!(*tree, "[{u}] {nu:?}");
+        if nu.child == [Self::EMPTY, Self::EMPTY] {
             return;
         }
-        for c in u.child {
+        for c in nu.child {
             if c != Self::EMPTY {
-                self.tree_dbg(&self.nodes[c], tree);
+                self.tree_preorder_dbg(c, tree);
             } else {
-                tree.add_leaf("<no edge>");
+                add_leaf_to!(*tree, "<no edge>");
             }
+        }
+    }
+    #[allow(dead_code)]
+    fn tree_inorder_dbg(&self, u: Idx, tree: &TreeBuilder) {
+        let nu = &self.nodes[u];
+        if nu.child[0] != Self::EMPTY {
+            let _b = tree.add_branch(&format!("left child of {u}"));
+            self.tree_inorder_dbg(nu.child[0], tree);
+        }
+        add_branch_to!(*tree, "[{u}] {nu:?}");
+        if nu.child[1] != Self::EMPTY {
+            self.tree_inorder_dbg(nu.child[1], tree);
         }
     }
     fn n(&self, u: Idx) -> Option<&Node<Ag>> {
@@ -107,20 +137,23 @@ impl<Ag: AggregatedData> Treaps<Ag> {
             }
         })
     }
-    // Panics if empty
+    // Panics if empty. Returns old value
     fn change_left(&mut self, u: Idx, new_l: Idx, flipped: bool) -> Idx {
         let n = &mut self.nodes[u];
         let li = n.flip(flipped) as usize;
+        add_branch!("Change child[{li}] of {u} to {new_l}", new_l = I(new_l));
         let old_l = self.nodes[u].child[li];
         if old_l != Self::EMPTY {
+            add_leaf!("({old_l}).parent = NULL");
             self.nodes[old_l].parent = Self::EMPTY;
         }
         self.nodes[u].child[li] = new_l;
-        self.recalc(u);
         if new_l != Self::EMPTY {
+            add_leaf!("({new_l}).parent = {u}");
             self.nodes[new_l].parent = u;
         }
-        new_l
+        self.recalc(u);
+        old_l
     }
     fn change_right(&mut self, u: Idx, new_r: Idx, flipped: bool) -> Idx {
         self.change_left(u, new_r, !flipped)
@@ -162,10 +195,17 @@ impl<Ag: AggregatedData> Treaps<Ag> {
     /// (First k, rest)
     fn split_k(&mut self, u: Idx, k: usize, flipped: bool) -> (Idx, Idx) {
         if u == Self::EMPTY || k == 0 {
-            return (Self::EMPTY, Self::EMPTY);
+            // If k == 0 the node is fully returned on the right
+            return (Self::EMPTY, u);
         }
+        add_branch!("split_k({u}, {k}, {flipped})");
         let [l, r] = self.child(u, flipped);
         let szl = self.size(l);
+        log::info!(
+            "u = {u} k = {k} l = {l} r = {r} szl = {szl}",
+            l = I(l),
+            r = I(r)
+        );
         if k <= szl {
             self.change_left(u, Self::EMPTY, flipped);
             let (ll, lr) = self.split_k(l, k, self.nodes[u].flip(flipped));
@@ -177,26 +217,34 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         }
     }
     fn concat_inner(&mut self, u: Idx, v: Idx) -> Idx {
+        add_branch!("concat({u}, {v})", u = I(u), v = I(v));
         if u == Self::EMPTY {
+            add_leaf!("Return {v}");
             return v;
         } else if v == Self::EMPTY {
+            add_leaf!("Return {u}");
             return u;
         }
-        if self.nodes[u].priority > self.nodes[v].priority {
-            let new_r = self.concat_inner(self.child(u, false)[1], v);
+        let r = if self.nodes[u].priority > self.nodes[v].priority {
+            let old_r = self.change_right(u, Self::EMPTY, false);
+            let new_r = self.concat_inner(old_r, v);
+            self.nodes[new_r].flip_subtree ^= self.nodes[u].flip_subtree;
             self.change_right(u, new_r, false);
-            if self.nodes[u].flip_subtree {
-                self.reverse(new_r);
-            }
             u
         } else {
-            let new_l = self.concat_inner(u, self.child(v, false)[0]);
+            let old_l = self.change_left(v, Self::EMPTY, false);
+            let new_l = self.concat_inner(u, old_l);
+            self.nodes[new_l].flip_subtree ^= self.nodes[v].flip_subtree;
             self.change_left(v, new_l, false);
-            if self.nodes[v].flip_subtree {
-                self.reverse(new_l);
-            }
             v
-        }
+        };
+        let mut t = TreeBuilder::new();
+        let _b = t.add_branch(&format!("Before calc({u}, {v}) returns {r}"));
+        self.tree_inorder_dbg(r, &mut t);
+        log::info!("{}", t.string());
+
+        add_leaf!("Return {r}");
+        r
     }
     fn range_agg_lr_inner(&self, u: Idx, ql: usize, qr: usize) -> Ag {
         if u == Self::EMPTY || ql >= qr {
@@ -248,11 +296,9 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn root(&self, mut u: Idx) -> Idx {
-        let ou = u;
         while self.parent(u) != Self::EMPTY {
             u = self.nodes[u].parent;
         }
-        log::info!("root({ou}) = {u}");
         u
     }
 
@@ -260,9 +306,12 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         &self.nodes[u].data
     }
 
-    fn data_mut(&mut self, u: Idx) -> &mut Ag::Data {
-        // TODO: this can't be like this
-        &mut self.nodes[u].data
+    fn mutate_data(&mut self, mut u: Idx, f: impl FnOnce(&mut Ag::Data)) {
+        f(&mut self.nodes[u].data);
+        while u != Self::EMPTY {
+            self.recalc(u);
+            u = self.parent(u);
+        }
     }
 
     fn order(&self, mut u: Idx) -> usize {
@@ -341,18 +390,36 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
-        log::info!("Concat {u} {v}");
+        defer!(|t| log::info!("{}", t.string()));
+        add_branch!("Concat {u} {v}");
         let (u, v) = (self.root(u), self.root(v));
         self.concat_inner(u, v)
     }
 
     fn split_lr(&mut self, u: Idx, ql: usize, qr: usize) -> (Idx, Idx, Idx) {
+        let u = self.root(u);
+        defer!(|t| log::info!("{}", t.string()));
+        add_branch!("split({u}, {ql}, {qr})");
         let (l, mr) = self.split_k(u, ql, false);
+        log::info!(
+            "After split({}, {ql}) = (l={}, mr={})\n{self:?}",
+            I(u),
+            I(l),
+            I(mr)
+        );
         let (m, r) = self.split_k(mr, qr - ql, false);
+        log::info!(
+            "After split({}, {}) = (m={}, r={})\n{self:?}",
+            I(mr),
+            qr - ql,
+            I(m),
+            I(r)
+        );
         (l, m, r)
     }
 
     fn reverse(&mut self, u: Idx) {
+        let u = self.root(u);
         self.nodes[u].flip_subtree ^= true;
     }
 }

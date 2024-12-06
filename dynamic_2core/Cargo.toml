@@ -13,3 +13,4 @@ debug_tree = "0.4"
 flexi_logger = { version = "0.29", default-features = false, features = [
     "colors",
 ] }
+scopeguard = "1"

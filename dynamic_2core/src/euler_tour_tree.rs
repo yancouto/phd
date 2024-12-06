@@ -259,16 +259,17 @@ where
         self.l.data(u.0).data()
     }
 
-    pub fn data_mut(&mut self, u: NodeRef) -> &mut Ag::Data {
-        self.l.data_mut(u.0).data_mut()
+    pub fn mutate_data(&mut self, u: NodeRef, f: impl FnOnce(&mut Ag::Data)) {
+        self.l.mutate_data(u.0, |d| f(d.data_mut()))
     }
 
     pub fn edata(&self, e: EdgeRef) -> [&Ag::Data; 2] {
         [self.l.data(e.0).data(), self.l.data(e.0 + 1).data()]
     }
 
-    pub fn edata_mut(&mut self, e: EdgeRef, direction: bool) -> &mut Ag::Data {
-        self.l.data_mut(e.0 + (direction as usize)).data_mut()
+    pub fn mutate_edata(&mut self, e: EdgeRef, direction: bool, f: impl FnOnce(&mut Ag::Data)) {
+        self.l
+            .mutate_data(e.0 + (direction as usize), |d| f(d.data_mut()))
     }
 
     pub fn try_node(&self, u: Idx) -> Option<NodeRef> {

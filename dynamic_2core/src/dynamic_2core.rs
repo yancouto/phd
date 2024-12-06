@@ -386,10 +386,8 @@ where
             None
         }
     }
-    fn unwrap_node_mut(&mut self, u: Node, lvl: Level) -> NodeM<'_> {
-        self.ett[lvl]
-            .data_mut(self.levels[lvl][u])
-            .unwrap_node_mut()
+    fn mutate_node(&mut self, u: Node, lvl: Level, f: impl FnOnce(NodeM<'_>)) {
+        self.ett[lvl].mutate_data(self.levels[lvl][u], |d| f(d.unwrap_node_mut()))
     }
     // Does not affect the Data::Edge.levels field
     fn add_edge_id(&mut self, e_id: EdgeId) {
@@ -402,8 +400,8 @@ where
                     .entry((w, lvl))
                     .or_default()
                     .insert(e_id));
-                *self.unwrap_node_mut(w, lvl).extra_edges += 1;
-                *self.unwrap_node_mut(w, 0).any_extra_edges += 1;
+                self.mutate_node(w, lvl, |n| *n.extra_edges += 1);
+                self.mutate_node(w, 0, |n| *n.any_extra_edges += 1);
             }
             self.assert_extra(e_id, lvl);
         }
@@ -419,8 +417,8 @@ where
                     .get_mut(&(w, lvl))
                     .unwrap()
                     .remove(&e_id));
-                *self.unwrap_node_mut(w, lvl).extra_edges -= 1;
-                *self.unwrap_node_mut(w, 0).any_extra_edges -= 1;
+                self.mutate_node(w, lvl, |n| *n.extra_edges -= 1);
+                self.mutate_node(w, 0, |n| *n.any_extra_edges -= 1);
             }
         }
     }
@@ -435,7 +433,7 @@ where
                 .enumerate()
                 .flat_map(|(elvl, e)| [(elvl, e, false), (elvl, e, true)])
             {
-                *self.ett[elvl].edata_mut(*e, dir).unwrap_edge_mut().1 = lvl + 1;
+                self.ett[elvl].mutate_edata(*e, dir, |e| *e.unwrap_edge_mut().1 = lvl + 1);
             }
             let e = Data::Edge {
                 level: lvl + 1,

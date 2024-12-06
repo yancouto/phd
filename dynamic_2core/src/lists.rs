@@ -82,7 +82,7 @@ where
     /// Data associated with u.
     fn data(&self, u: Idx) -> &Ag::Data;
     /// Data associated with u.
-    fn data_mut(&mut self, u: Idx) -> &mut Ag::Data;
+    fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data));
     /// Position of u in its list, 0-indexed.
     fn order(&self, u: Idx) -> usize;
     fn is_first(&self, u: Idx) -> bool {
