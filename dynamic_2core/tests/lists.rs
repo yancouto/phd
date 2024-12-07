@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use common::{init_logger, slow_lists::SlowLists, AggDigit, AggSum, LOGGER};
 use debug_tree::{add_branch_to, default_tree};
 use dynamic_2core::lists::*;
-use rand::{Rng, SeedableRng};
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    Rng, SeedableRng,
+};
 use scopeguard::{OnUnwind, ScopeGuard};
 use treap::Treaps;
 
@@ -113,6 +116,13 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.data(l.find_kth(r, 0)), &1);
         assert!(l.is_empty(l.find_kth(r, 6)));
         Self::assert_data(&l, r, &[1, 2, 3, 8, 12, 10]);
+        let (r3, r4, r5) = (
+            Self::add_list(&mut l, &[15, 20]),
+            Self::add_list(&mut l, &[-12]),
+            Self::add_list(&mut l, &[99, 98, 97]),
+        );
+        let r = l.concat_all([r4, r, r5, r3]);
+        Self::assert_data(&l, r, &[-12, 1, 2, 3, 8, 12, 10, 99, 98, 97, 15, 20]);
     }
 
     fn test_split() {
@@ -242,7 +252,9 @@ where
     Ag: AggregatedData<Data = i32>,
     L: Lists<Ag>,
 {
+    const RANGE: std::ops::Range<i32> = -100000..100000;
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let rng = &mut rng;
     let mut l = L::new(N);
     let mut slow = SlowLists::<Ag>::new(N);
     for i in 0..N {
@@ -253,12 +265,42 @@ where
         if q % 100 == 0 {
             log::info!("q {q}");
         }
-        let roots = slow.roots();
+        let lists = slow.lists();
+        let mut rnd_u = |mn_size: usize| {
+            *lists
+                .iter()
+                .filter(|v| v.len() >= mn_size)
+                .choose(rng)
+                .unwrap()
+                .choose(rng)
+                .unwrap()
+        };
+        let ln = lists.len();
+        let mut concat = || {
+            let [l1, l2]: [_; 2] = lists
+                .choose_multiple(rng, 2)
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap();
+        };
+        let mut split = || {
+            l.split(rnd_u(1), 0..1);
+        };
         match rng.gen_range(0..100) {
-            // split
             // concat
+            _ if ln > 20 => concat(),
+            0..35 if ln > 1 => concat(),
+            // split
+            0..75 if ln == 1 => split(),
+            35..65 if ln != N => split(),
             // reverse
-            _ => todo!(),
+            65..90 => {
+                l.reverse(rnd_u(2));
+            }
+            // mutate data
+            _ => {
+                l.mutate_data(rnd_u(1), |v| *v = rng.gen_range(RANGE));
+            }
         }
     }
 }

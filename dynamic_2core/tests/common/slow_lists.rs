@@ -42,10 +42,16 @@ impl<Ag: AggregatedData> SlowLists<Ag> {
     fn entry(&self, u: Idx) -> &Entry<Ag> {
         self.list(u).iter().find(|e| e.idx == u).unwrap()
     }
-    pub fn roots(&self) -> Vec<Idx> {
+    pub fn lists(&self) -> Vec<Vec<Idx>> {
         self.lists
             .iter()
-            .filter_map(|l| l.first().map(|e| e.idx))
+            .filter_map(|v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.iter().map(|e| e.idx).collect())
+                }
+            })
             .collect()
     }
 }
