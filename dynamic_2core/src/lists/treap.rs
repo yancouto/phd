@@ -353,25 +353,37 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         }
     }
 
-    fn order(&self, mut u: Idx) -> usize {
-        // XXX: This needs fixing due to flipping. Walk all the way to root, then walk down.
-        let mut ord = 0;
-        while self.parent(u) != Self::EMPTY {
-            let prev = u;
-            u = self.nodes[u].parent;
-            let [l, r] = self.child(u, false);
-            if prev == r {
-                ord += self.size(l) + 1;
-            }
+    fn order(&self, u: Idx) -> usize {
+        if u == Self::EMPTY {
+            return 0;
         }
-        ord
+        let mut path = vec![];
+        let mut cur = u;
+        while cur != Self::EMPTY {
+            path.push(cur);
+            cur = self.parent(cur);
+        }
+        path.reverse();
+        let mut flipped = false;
+        let mut ord = 0;
+        for i in 0..(path.len() - 1) {
+            let [p, u] = [path[i], path[i + 1]];
+            let [l, r] = self.child(p, flipped);
+            if u == r {
+                ord += self.size(l) + 1
+            }
+            flipped = self.nodes[p].flip(flipped);
+        }
+        let [ul, _] = self.child(u, flipped);
+        ord + self.size(ul)
     }
 
     fn find_element(
         &self,
-        mut u: Idx,
+        u: Idx,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
+        let mut u = self.root(u);
         let mut flipped = false;
         use SearchDirection::*;
         while u != Self::EMPTY {
@@ -393,12 +405,14 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn find_kth(&self, mut u: Idx, mut k: usize) -> Idx {
+        log::info!("find_kth({u}, {k})");
         let mut flipped = false;
         u = self.root(u);
         while u != Self::EMPTY {
             let [l, r] = self.child(u, flipped);
             flipped = self.nodes[u].flip(flipped);
             let sl = self.size(l);
+            log::info!("u {u} k {k} szl {sl}");
             if sl > k {
                 u = l;
             } else if sl == k {

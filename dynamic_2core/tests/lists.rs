@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use common::{init_logger, slow_lists::SlowLists, AggDigit, AggSum};
+use common::{init_logger, slow_lists::SlowLists, AggDigit, AggSum, LOGGER};
 use debug_tree::{add_branch_to, default_tree};
 use dynamic_2core::lists::*;
 use rand::{Rng, SeedableRng};
@@ -21,7 +21,8 @@ fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data:
     let mut cur_u = l.first(u);
     assert!(l.is_first(cur_u));
     for i in 0..data.len() {
-        assert_eq!(cur_u, l.find_kth(u, i));
+        assert_eq!(l.order(cur_u), i);
+        assert_eq!(l.find_kth(u, i), cur_u, "i = {i}");
         assert_eq!(l.data(cur_u), &data[i], "element {i} is incorrect");
         if i == data.len() - 1 {
             assert!(l.is_last(cur_u));
@@ -196,27 +197,31 @@ impl<L: Lists<AggSum>> LTests<L> {
 
     fn test_find_element() {
         let l = Self::build(&[0, 0, 1, 0, 3, 0, 2, 0, 1, 1000]);
-        let idx_of_kth_value = |k: i32| {
-            l.find_element(0, move |s: SearchData<'_, AggSum>| {
+        let idx_of_kth_value = |mut k: i32, expected: Idx| {
+            log::info!("Find {k}");
+            let v = l.find_element(0, move |s: SearchData<'_, AggSum>| {
+                log::info!("k {k} s {s:?}");
                 if s.left_agg.0 >= k {
                     SearchDirection::Left
                 } else if s.left_agg.0 + s.current_data >= k {
                     SearchDirection::Found
                 } else {
+                    k -= s.left_agg.0 + s.current_data;
                     SearchDirection::Right
                 }
-            })
+            });
+            assert_eq!(v, expected, "idx of {k} was wrong");
         };
-        assert_eq!(idx_of_kth_value(1), 2);
-        assert_eq!(idx_of_kth_value(2), 4);
-        assert_eq!(idx_of_kth_value(3), 4);
-        assert_eq!(idx_of_kth_value(4), 4);
-        assert_eq!(idx_of_kth_value(5), 6);
-        assert_eq!(idx_of_kth_value(6), 6);
-        assert_eq!(idx_of_kth_value(7), 8);
-        assert_eq!(idx_of_kth_value(8), 9);
-        assert_eq!(idx_of_kth_value(255), 9);
-        assert_eq!(idx_of_kth_value(100000), L::EMPTY);
+        idx_of_kth_value(1, 2);
+        idx_of_kth_value(2, 4);
+        idx_of_kth_value(3, 4);
+        idx_of_kth_value(4, 4);
+        idx_of_kth_value(5, 6);
+        idx_of_kth_value(6, 6);
+        idx_of_kth_value(7, 8);
+        idx_of_kth_value(8, 9);
+        idx_of_kth_value(255, 9);
+        idx_of_kth_value(100000, L::EMPTY);
     }
 
     fn test_all() {

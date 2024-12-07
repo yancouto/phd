@@ -98,6 +98,15 @@ pub static LOGGER: LazyLock<Mutex<LoggerHandle>> = LazyLock::new(|| {
 });
 
 #[allow(dead_code)]
+pub fn log_traces() {
+    LOGGER
+        .lock()
+        .unwrap()
+        .parse_and_push_temp_spec("trace")
+        .unwrap()
+}
+
+#[allow(dead_code)]
 pub fn init_logger() {
     let _ = &*LOGGER;
 }
