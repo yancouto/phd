@@ -82,7 +82,7 @@ where
 
     /// Returns the root of the list containing u. All nodes in the list have the same root.
     fn root(&self, u: Idx) -> Idx;
-    /// Data associated with u.
+    /// Data associated with u. Panics if u doesn't exist.
     fn data(&self, u: Idx) -> &Ag::Data;
     /// Data associated with u.
     fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data));

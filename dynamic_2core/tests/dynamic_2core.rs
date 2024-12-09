@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use common::{init_logger, slow_lct::SlowLCT, slow_lists::SlowLists};
 use dynamic_2core::{
     dynamic_2core::{AgData, D2CSolver, Dynamic2CoreSolver},
+    euler_tour_tree::ETT,
     link_cut_tree::LCT,
     lists::treap::Treaps,
 };
@@ -264,47 +265,50 @@ fn test_dumb() {
     D2CTests::<Slow>::test_all();
 }
 
+type SlowETT = ETT<SlowLists<AgData>, AgData>;
+type TreapETT = ETT<Treaps<AgData>, AgData>;
+
 #[test]
 fn test_slow() {
     init_logger();
-    D2CTests::<D2CSolver<SlowLists<AgData>, SlowLCT>>::test_all();
+    D2CTests::<D2CSolver<SlowETT, SlowLCT>>::test_all();
 }
 
 #[test]
 fn test_lct_with_slow() {
     init_logger();
-    D2CTests::<D2CSolver<SlowLists<AgData>, LCT<SlowLists>>>::test_all();
+    D2CTests::<D2CSolver<SlowETT, LCT<SlowLists>>>::test_all();
 }
 
 #[test]
 fn test_lct_with_treap() {
     init_logger();
-    D2CTests::<D2CSolver<Treaps<AgData>, LCT<Treaps>>>::test_all();
+    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::test_all();
 }
 
 #[test]
 fn test_cmp_slow() {
     init_logger();
-    D2CTests::<D2CSolver<SlowLists<AgData>, LCT<SlowLists>>>::compare_with_slow(9232345);
+    D2CTests::<D2CSolver<SlowETT, LCT<SlowLists>>>::compare_with_slow(9232345);
 }
 #[test]
 fn test_dyn2core_cmp1() {
     init_logger();
-    D2CTests::<D2CSolver<Treaps<AgData>, LCT<Treaps>>>::compare_with_slow(9232345);
+    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(9232345);
 }
 #[test]
 fn test_dyn2core_cmp2() {
-    D2CTests::<D2CSolver<Treaps<AgData>, LCT<Treaps>>>::compare_with_slow(100000007);
+    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(100000007);
 }
 #[test]
 fn test_dyn2core_cmp3() {
-    D2CTests::<D2CSolver<Treaps<AgData>, LCT<Treaps>>>::compare_with_slow(3);
+    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(3);
 }
 
 fn stress_iter() {
     let seed: u64 = thread_rng().gen();
     log::info!("seed = {seed}");
-    D2CTests::<D2CSolver<Treaps<AgData>, LCT<Treaps>>>::compare_with_slow(seed);
+    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(seed);
 }
 
 #[test]
