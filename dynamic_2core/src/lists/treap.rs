@@ -87,7 +87,7 @@ impl<Ag: AggregatedData> Debug for Treaps<Ag> {
         let _b = builder.add_branch("Treaps");
         for u in 0..self.nodes.len() {
             if self.nodes[u].parent == Self::EMPTY {
-                self.tree_preorder_dbg(u, &builder);
+                self.tree_inorder_dbg(u, &builder);
             }
         }
         writeln!(f, "{}", builder.string())
@@ -239,7 +239,7 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         add_branch!("split_k({u}, {k}, {flipped})");
         let [l, r] = self.child(u, flipped);
         let szl = self.size(l);
-        log::info!(
+        log::trace!(
             "u = {u} k = {k} l = {l} r = {r} szl = {szl}",
             l = I(l),
             r = I(r)
@@ -286,7 +286,7 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         let mut t = TreeBuilder::new();
         let _b = t.add_branch(&format!("Before calc({u}, {v}) returns {r}"));
         self.tree_preorder_dbg(r, &mut t);
-        log::info!("{}", t.string());
+        log::trace!("{}", t.string());
 
         add_leaf!("Return {r}");
         r
@@ -405,14 +405,14 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn find_kth(&self, mut u: Idx, mut k: usize) -> Idx {
-        log::info!("find_kth({u}, {k})");
+        log::trace!("find_kth({u}, {k})");
         let mut flipped = false;
         u = self.root(u);
         while u != Self::EMPTY {
             let [l, r] = self.child(u, flipped);
             flipped = self.nodes[u].flip(flipped);
             let sl = self.size(l);
-            log::info!("u {u} k {k} szl {sl}");
+            log::trace!("u {u} k {k} szl {sl}");
             if sl > k {
                 u = l;
             } else if sl == k {
@@ -443,21 +443,21 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
-        defer!(|t| log::info!("{}", t.string()));
+        //defer!(|t| log::trace!("{}", t.string()));
         add_branch!("Concat {u} {v}", u = I(u), v = I(v));
         let (u, v) = (self.root(u), self.root(v));
         if u == v {
             return u;
         }
         if u != Self::EMPTY {
-            defer_print!("TU");
-            add_branch_to!("TU", "u = ");
-            self.tree_preorder_dbg(u, &"TU");
+            //defer_print!("TU");
+            //add_branch_to!("TU", "u = ");
+            //self.tree_preorder_dbg(u, &"TU");
         }
         if v != Self::EMPTY {
-            defer_print!("TV");
-            add_branch_to!("TV", "v = ");
-            self.tree_preorder_dbg(v, &"TV");
+            //defer_print!("TV");
+            //add_branch_to!("TV", "v = ");
+            //self.tree_preorder_dbg(v, &"TV");
         }
 
         self.concat_inner(u, v)
@@ -465,17 +465,17 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
 
     fn split_lr(&mut self, u: Idx, ql: usize, qr: usize) -> (Idx, Idx, Idx) {
         let u = self.root(u);
-        defer!(|t| log::info!("{}", t.string()));
+        //defer!(|t| log::trace!("{}", t.string()));
         add_branch!("split({u}, {ql}, {qr})");
         let (l, mr) = self.split_k(u, ql, false);
-        log::info!(
+        log::trace!(
             "After split({}, {ql}) = (l={}, mr={})\n{self:?}",
             I(u),
             I(l),
             I(mr)
         );
         let (m, r) = self.split_k(mr, qr - ql, false);
-        log::info!(
+        log::trace!(
             "After split({}, {}) = (m={}, r={})\n{self:?}",
             I(mr),
             qr - ql,

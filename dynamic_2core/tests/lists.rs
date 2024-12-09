@@ -1,12 +1,9 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use common::{init_logger, slow_lists::SlowLists, AggDigit, AggSum, LOGGER};
-use debug_tree::{add_branch_to, default_tree};
+use common::{init_logger, log_traces, slow_lists::SlowLists, AggDigit, AggSum};
+use debug_tree::add_branch_to;
 use dynamic_2core::lists::*;
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    Rng, SeedableRng,
-};
+use rand::prelude::*;
 use scopeguard::{OnUnwind, ScopeGuard};
 use treap::Treaps;
 
@@ -19,7 +16,6 @@ struct LTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
 
 fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data: &[i32]) {
     add_branch_to!("test", "assert_data({u} = {data:?})");
-    default_tree().peek_print();
     assert_eq!(l.len(u), data.len(), "{l:?}");
     let mut cur_u = l.first(u);
     assert!(l.is_first(cur_u));
@@ -208,9 +204,9 @@ impl<L: Lists<AggSum>> LTests<L> {
     fn test_find_element() {
         let l = Self::build(&[0, 0, 1, 0, 3, 0, 2, 0, 1, 1000]);
         let idx_of_kth_value = |mut k: i32, expected: Idx| {
-            log::info!("Find {k}");
+            log::trace!("Find {k}");
             let v = l.find_element(0, move |s: SearchData<'_, AggSum>| {
-                log::info!("k {k} s {s:?}");
+                log::trace!("k {k} s {s:?}");
                 if s.left_agg.0 >= k {
                     SearchDirection::Left
                 } else if s.left_agg.0 + s.current_data >= k {
@@ -247,59 +243,103 @@ impl<L: Lists<AggSum>> LTests<L> {
 }
 
 #[allow(non_snake_case)]
-fn random_compare_with_slow<L, Ag>(Q: usize, N: usize, seed: u64)
+fn random_compare_with_slow<L, Ag>(Q: usize, N: usize, range: std::ops::Range<i32>, seed: u64)
 where
     Ag: AggregatedData<Data = i32>,
     L: Lists<Ag>,
 {
-    const RANGE: std::ops::Range<i32> = -100000..100000;
+    init_logger();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     let rng = &mut rng;
-    let mut l = L::new(N);
-    let mut slow = SlowLists::<Ag>::new(N);
+    let mut l = guard(L::new(N));
+    let l = &mut l as &mut L;
+    type SL<Ag> = SlowLists<Ag>;
+    let mut slow = SL::<Ag>::new(N);
+    let sl = &mut slow;
     for i in 0..N {
-        assert_eq!(i, l.create(i as i32));
-        slow.create(i as i32);
+        let x = rng.gen_range(range.clone());
+        assert_eq!(i, l.create(x));
+        sl.create(x);
     }
-    for q in 0..Q {
-        if q % 100 == 0 {
+    for q in 1..=Q {
+        if q % 100 == 0 || q >= 137 {
             log::info!("q {q}");
         }
-        let lists = slow.lists();
-        let mut rnd_u = |mn_size: usize| {
+        if q == 137 {
+            log_traces();
+        }
+        let lists = sl.lists();
+        let lists = &lists;
+        let rnd_u = |mn_size: usize, rng: &mut StdRng| {
             *lists
                 .iter()
                 .filter(|v| v.len() >= mn_size)
                 .choose(rng)
-                .unwrap()
+                .unwrap_or(&lists[0])
                 .choose(rng)
                 .unwrap()
         };
         let ln = lists.len();
-        let mut concat = || {
+        let concat = |l: &mut L, sl: &mut SL<Ag>, rng: &mut StdRng| {
             let [l1, l2]: [_; 2] = lists
                 .choose_multiple(rng, 2)
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap();
+            let (u, v) = (*l1.choose(rng).unwrap(), *l2.choose(rng).unwrap());
+            l.concat(u, v);
+            sl.concat(u, v);
         };
-        let mut split = || {
-            l.split(rnd_u(1), 0..1);
+        let split = |l: &mut L, sl: &mut SL<Ag>, rng: &mut StdRng| {
+            let l1 = lists.choose(rng).unwrap();
+            let (a, b) = (rng.gen_range(0..l1.len()), rng.gen_range(0..l1.len()));
+            let range = (a.min(b))..(a.max(b));
+            let &u = l1.choose(rng).unwrap();
+            l.split(u, range.clone());
+            sl.split(u, range);
         };
         match rng.gen_range(0..100) {
             // concat
-            _ if ln > 20 => concat(),
-            0..35 if ln > 1 => concat(),
+            _ if ln > 20 => concat(l, sl, rng),
+            0..35 if ln > 1 => concat(l, sl, rng),
             // split
-            0..75 if ln == 1 => split(),
-            35..65 if ln != N => split(),
+            0..75 if ln == 1 => split(l, sl, rng),
+            35..65 if ln != N => split(l, sl, rng),
             // reverse
             65..90 => {
-                l.reverse(rnd_u(2));
+                let u = rnd_u(2, rng);
+                l.reverse(u);
+                sl.reverse(u);
             }
             // mutate data
             _ => {
-                l.mutate_data(rnd_u(1), |v| *v = rng.gen_range(RANGE));
+                let u = rnd_u(1, rng);
+                let new_val = rng.gen_range(range.clone());
+                let f = |v: &mut i32| *v = new_val;
+                l.mutate_data(u, &f);
+                sl.mutate_data(u, &f);
+            }
+        }
+        if q % 1 == 0 {
+            let mut roots = BTreeSet::new();
+            for list in sl.lists() {
+                let any_u = *list.choose(rng).unwrap();
+                let root = l.root(any_u);
+                for &r in &roots {
+                    assert!(!l.on_same_list(any_u, r));
+                }
+                assert!(roots.insert(root));
+                for &u in &list {
+                    assert_eq!(root, l.root(u), "all should have the same root");
+                    for &v in list.choose_multiple(rng, 5) {
+                        assert!(l.on_same_list(u, v), "on_same_list wrong");
+                    }
+                }
+                assert_data(
+                    l,
+                    any_u,
+                    &list.iter().map(|&u| *sl.data(u)).collect::<Vec<_>>(),
+                );
             }
         }
     }
@@ -354,13 +394,13 @@ fn test_treap() {
 
 #[test]
 fn test_treap_cmp1() {
-    random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, 2012);
+    random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, -100000..100000, 12);
 }
 #[test]
 fn test_treap_cmp2() {
-    random_compare_with_slow::<Treaps<AggSum>, _>(1000, 1000, 74828);
+    random_compare_with_slow::<Treaps<AggSum>, _>(1000, 1000, -100000..100000, 74828);
 }
 #[test]
 fn test_treap_cmp3() {
-    random_compare_with_slow::<Treaps<AggDigit>, _>(10000, 8, 4635);
+    random_compare_with_slow::<Treaps<AggDigit>, _>(10000, 8, 0..10, 4635);
 }
