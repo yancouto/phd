@@ -174,7 +174,7 @@ where
         wu_data: Ag::Data,
     ) -> EdgeRef {
         assert!(!self.l.on_same_list(u.0, root_w.0));
-        assert!(self.l.is_root(root_w.0));
+        assert!(self.l.is_first(root_w.0));
         let mx = self.l.total_size();
         let uw = self.l.create(ETData::Edge {
             data: uw_data,

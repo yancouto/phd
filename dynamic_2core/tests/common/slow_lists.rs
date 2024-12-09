@@ -98,6 +98,9 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
     }
 
     fn order(&self, u: Idx) -> usize {
+        if u == Self::EMPTY {
+            return 0;
+        }
         self.list(u).iter().position(|e| e.idx == u).unwrap()
     }
 

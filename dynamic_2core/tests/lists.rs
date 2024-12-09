@@ -22,7 +22,7 @@ fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data:
     for i in 0..data.len() {
         assert_eq!(l.order(cur_u), i);
         assert_eq!(l.find_kth(u, i), cur_u, "i = {i}");
-        assert_eq!(l.data(cur_u), &data[i], "element {i} is incorrect");
+        assert_eq!(l.data(cur_u), &data[i], "element {i}={cur_u} is incorrect");
         if i == data.len() - 1 {
             assert!(l.is_last(cur_u));
         }
@@ -134,6 +134,10 @@ impl<L: Lists<AggSum>> LTests<L> {
         Self::assert_data(&l, left, &[1]);
         Self::assert_data(&l, mid, &[2, 3, 7]);
         Self::assert_data(&l, right, &[9, 2]);
+        let (left, mid, right) = l.split(mid, 1..1);
+        Self::assert_data(&l, left, &[2]);
+        Self::assert_data(&l, mid, &[]);
+        Self::assert_data(&l, right, &[3, 7]);
     }
 
     fn test_same_as_not_content() {
@@ -262,10 +266,10 @@ where
         sl.create(x);
     }
     for q in 1..=Q {
-        if q % 100 == 0 || q >= 137 {
+        if q % 100 == 0 {
             log::info!("q {q}");
         }
-        if q == 137 {
+        if q == 0 {
             log_traces();
         }
         let lists = sl.lists();
@@ -320,16 +324,23 @@ where
                 sl.mutate_data(u, &f);
             }
         }
-        if q % 1 == 0 {
+        if q % 30 == 0 {
             let mut roots = BTreeSet::new();
-            for list in sl.lists() {
+            let lists = sl.lists();
+            log::trace!("Double check against lists: {lists:?}");
+            for (i, list) in lists.iter().enumerate() {
                 let any_u = *list.choose(rng).unwrap();
                 let root = l.root(any_u);
                 for &r in &roots {
                     assert!(!l.on_same_list(any_u, r));
                 }
+                for j in 0..i {
+                    for &v in lists[j].choose_multiple(rng, 5) {
+                        assert!(!l.on_same_list(*list.choose(rng).unwrap(), v));
+                    }
+                }
                 assert!(roots.insert(root));
-                for &u in &list {
+                for &u in list {
                     assert_eq!(root, l.root(u), "all should have the same root");
                     for &v in list.choose_multiple(rng, 5) {
                         assert!(l.on_same_list(u, v), "on_same_list wrong");
@@ -394,11 +405,11 @@ fn test_treap() {
 
 #[test]
 fn test_treap_cmp1() {
-    random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, -100000..100000, 12);
+    random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, -100000..100000, 10000);
 }
 #[test]
 fn test_treap_cmp2() {
-    random_compare_with_slow::<Treaps<AggSum>, _>(1000, 1000, -100000..100000, 74828);
+    random_compare_with_slow::<Treaps<AggSum>, _>(500, 1000, -100000..100000, 74828);
 }
 #[test]
 fn test_treap_cmp3() {

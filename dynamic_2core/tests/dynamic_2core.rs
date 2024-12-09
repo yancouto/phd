@@ -302,16 +302,16 @@ fn test_cmp_slow() {
     );
 }
 #[test]
-fn test_cmp1() {
+fn test_dyn2core_cmp1() {
     init_logger();
     D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(9232345);
 }
 #[test]
-fn test_cmp2() {
+fn test_dyn2core_cmp2() {
     D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(100000007);
 }
 #[test]
-fn test_cmp3() {
+fn test_dyn2core_cmp3() {
     D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(3);
 }
 
