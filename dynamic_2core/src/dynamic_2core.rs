@@ -27,7 +27,6 @@ type EdgeId = usize;
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Data {
     Node {
-        idx: Node,
         /// Extra edges ON THIS LEVEL only
         extra_edges: usize,
         /// Extra edges on all levels. This is only used on level 0.
@@ -43,7 +42,7 @@ pub enum Data {
 impl std::fmt::Debug for Data {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Data::Node { idx, .. } => write!(f, "({})", idx),
+            Data::Node { .. } => write!(f, "node"),
             Data::Edge { e_id, .. } => write!(f, "id={e_id}"),
         }
     }
@@ -58,7 +57,6 @@ impl Data {
     fn unwrap_node_mut(&mut self) -> NodeM<'_> {
         match self {
             Data::Node {
-                idx: _,
                 extra_edges,
                 any_extra_edges,
             } => NodeM {
@@ -109,7 +107,6 @@ impl AggregatedData for AgData {
             Data::Node {
                 extra_edges,
                 any_extra_edges,
-                idx: _,
             } => Self {
                 total_extra_edges: *extra_edges,
                 total_any_extra_edges: *any_extra_edges,
@@ -227,65 +224,6 @@ where
         Ok(())
     }
 
-    #[cfg(not(debug_assertions))]
-    fn assert_extra(&self, _: EdgeId, _: Level) {}
-    #[cfg(debug_assertions)]
-    fn assert_extra(&self, e_id: EdgeId, lvl: Level) {
-        let ((u, v), e_lvl) = self.edge(e_id);
-        assert!(self.edge_info[e_id].is_extra(), "edge is not extra");
-        assert_eq!(e_lvl, lvl, "edge has wrong level");
-        for u in [u, v] {
-            assert!(
-                self.u_level_to_extras[&(u, lvl)].contains(&e_id),
-                "edge not in extra list"
-            );
-        }
-    }
-    #[cfg(not(debug_assertions))]
-    fn assert_data(&self, _: Idx, _: Level) {}
-    #[cfg(debug_assertions)]
-    fn assert_data(&self, node: Idx, lvl: Level) {
-        if node == ETT::EMPTY {
-            return;
-        }
-        match self.ett[lvl].data(node) {
-            &Data::Node {
-                idx,
-                extra_edges,
-                any_extra_edges,
-            } => {
-                assert_eq!(
-                    self.u_level_to_extras
-                        .get(&(idx, lvl))
-                        .map_or(0, BTreeSet::len),
-                    extra_edges,
-                    "wrong extra edge count for {idx} at l{lvl}"
-                );
-                assert_eq!(
-                    any_extra_edges,
-                    if lvl == 0 {
-                        (0..self.ett.len())
-                            .map(|i| {
-                                self.u_level_to_extras
-                                    .get(&(idx, i))
-                                    .map_or(0, BTreeSet::len)
-                            })
-                            .sum()
-                    } else {
-                        0
-                    }
-                )
-            }
-            &Data::Edge { e_id, level, .. } => {
-                assert!(level >= lvl, "tree edge has level smaller than ETT level");
-                assert_eq!(
-                    self.edge_info[e_id].level, level,
-                    "tree edge has diff level in info and data"
-                );
-                assert!(!self.edge_info[e_id].is_extra(), "tree edge is extra");
-            }
-        }
-    }
     fn find_level_i_tree_edge(&mut self, i: Level, u: Idx) -> Option<EdgeId> {
         let found = self.ett[i].find_element(u, |d| {
             if matches!(d.current_data, Data::Edge { level, .. } if *level == i) {
@@ -320,7 +258,6 @@ where
             let &id = self.u_level_to_extras[&(found, i)]
                 .first()
                 .expect("missing extra edge");
-            self.assert_extra(id, i);
             Some(id)
         } else {
             None
@@ -375,7 +312,6 @@ where
                 self.mutate_node(w, lvl, |n| *n.extra_edges += 1);
                 self.mutate_node(w, 0, |n| *n.any_extra_edges += 1);
             }
-            self.assert_extra(e_id, lvl);
         }
     }
     /// Does not affect the Data::Edge.levels field
@@ -417,7 +353,6 @@ where
                     .expect("shouldn't be connected at next level"),
             );
         } else {
-            self.assert_extra(e_id, lvl + 1);
             assert!(
                 self.ett[lvl + 1].is_connected(u, v),
                 "extra edge but not connected"
@@ -438,15 +373,13 @@ where
         let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 1;
         let ett = (0..log2n)
             .map(|_| {
-                ETT::new(
-                    (0..n)
-                        .map(|idx| Data::Node {
-                            extra_edges: 0,
-                            any_extra_edges: 0,
-                            idx,
-                        })
-                        .collect(),
-                )
+                ETT::new(vec![
+                    Data::Node {
+                        extra_edges: 0,
+                        any_extra_edges: 0,
+                    };
+                    n
+                ])
             })
             .collect::<Vec<_>>();
         Self {
@@ -507,8 +440,6 @@ where
                     let ett = &self.ett[lvl];
                     assert!(!ett.is_connected(tu, tv));
                     assert!(!ett.is_connected(u, v));
-                    self.assert_data(tu, lvl);
-                    self.assert_data(tv, lvl);
                     if ett.tree_size(tu) < ett.tree_size(tv) {
                         tu
                     } else {
