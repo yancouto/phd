@@ -6,7 +6,7 @@ use flexi_logger::{Logger, LoggerHandle};
 pub mod slow_lct;
 pub mod slow_lists;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AggSum(pub i32);
 
 impl AggregatedData for AggSum {
@@ -31,7 +31,7 @@ impl PartialEq<i32> for AggSum {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct AggDigit {
     number: i32,
     size: u8,

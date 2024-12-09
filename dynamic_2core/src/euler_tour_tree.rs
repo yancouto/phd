@@ -51,40 +51,19 @@ impl<Data> ETData<Data> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ETAggregated<Ag: AggregatedData> {
-    data: Ag,
-    subtree_size: usize,
-}
-
-impl<Ag: AggregatedData> Default for ETAggregated<Ag> {
-    fn default() -> Self {
-        Self {
-            data: Ag::default(),
-            subtree_size: 0,
-        }
-    }
-}
+#[derive(Debug, Clone, Default)]
+pub struct ETAggregated<Ag: AggregatedData>(Ag);
 
 impl<Ag: AggregatedData> AggregatedData for ETAggregated<Ag> {
     type Data = ETData<Ag::Data>;
     fn from(data: &Self::Data) -> Self {
-        Self {
-            data: Ag::from(data.data()),
-            subtree_size: matches!(data, ETData::Node(_)).into(),
-        }
+        Self(Ag::from(data.data()))
     }
     fn merge(self, right: Self) -> Self {
-        Self {
-            data: self.data.merge(right.data),
-            subtree_size: self.subtree_size + right.subtree_size,
-        }
+        Self(self.0.merge(right.0))
     }
     fn reverse(self) -> Self {
-        Self {
-            data: self.data.reverse(),
-            subtree_size: self.subtree_size,
-        }
+        Self(self.0.reverse())
     }
 }
 
@@ -173,8 +152,8 @@ where
         uw_data: Ag::Data,
         wu_data: Ag::Data,
     ) -> EdgeRef {
-        assert!(!self.l.on_same_list(u.0, root_w.0));
-        assert!(self.l.is_first(root_w.0));
+        debug_assert!(!self.l.on_same_list(u.0, root_w.0));
+        debug_assert!(self.l.is_first(root_w.0));
         let mx = self.l.total_size();
         let uw = self.l.create(ETData::Edge {
             data: uw_data,
@@ -184,8 +163,6 @@ where
             data: wu_data,
             other: uw,
         }); // wu
-        assert_eq!(uw, mx);
-        assert_eq!(wu, mx + 1);
 
         // "AAA u BBB" and "w CCC" (it is root) becomes
         // AAA u uw w CCC wu BBB
@@ -196,16 +173,13 @@ where
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
     pub fn disconnect(&mut self, edge: EdgeRef) -> (NodeRef, NodeRef) {
         let (edge, other_e) = (edge.0, edge.0 + 1);
-        assert!(
-            self.l.on_same_list(edge, other_e),
-            "edge {edge} {other_e} must be connected {self:?}"
-        );
+        debug_assert!(self.l.on_same_list(edge, other_e));
         let (a, b) = (self.l.order(edge), self.l.order(other_e));
         let (left, middle, right) = self.l.split(edge, a.min(b)..=a.max(b));
         // Remove the first and last items, which is the edge which no longer exists
         let (_, middle, _) = self.l.split(middle, 1..self.l.len(middle) - 1);
-        assert_eq!(self.l.len(edge), 1);
-        assert_eq!(self.l.len(other_e), 1);
+        debug_assert_eq!(self.l.len(edge), 1);
+        debug_assert_eq!(self.l.len(other_e), 1);
         let rest = self.l.concat(left, right);
         (NodeRef(self.l.first(rest)), NodeRef(self.l.first(middle)))
     }
@@ -239,8 +213,8 @@ where
         self.l.find_element(u.0, |d| {
             search_strategy(SearchData {
                 current_data: d.current_data.data(),
-                left_agg: &d.left_agg.data,
-                right_agg: &d.right_agg.data,
+                left_agg: &d.left_agg.0,
+                right_agg: &d.right_agg.0,
             })
         })
     }

@@ -194,18 +194,6 @@ enum DbgMode {
 }
 use DbgMode::*;
 
-struct Dbg<T>(T, Level, DbgMode);
-
-impl<L, LC> std::fmt::Debug for Dbg<&D2CSolver<L, LC>>
-where
-    L: Lists<ETAggregated<AgData>>,
-    LC: LinkCutTree,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.dbg(f, self.1, self.2)
-    }
-}
-
 impl<L, LC> D2CSolver<L, LC>
 where
     L: Lists<ETAggregated<AgData>>,
@@ -449,7 +437,6 @@ where
                     )
                     .expect("shouldn't be connected at next level"),
             );
-            assert_eq!(levels.len(), lvl + 2, "edge has wrong number of levels");
         } else {
             self.assert_extra(e_id, lvl + 1);
             assert!(
@@ -529,7 +516,7 @@ where
         };
         if let Some(levels) = self.edge_info[e_id].levels.clone() {
             log::trace!(
-                "Removing tree edge {e_id} = ({u}, {v}) at level {}",
+                "Removing tree edge ({u}, {v}) at level {}",
                 self.edge_info[e_id].level
             );
             self.lc_0.reroot(u);
@@ -556,18 +543,17 @@ where
             self.rem_edge_id(e_id);
 
             for (i, small) in smallest_comp.into_iter().enumerate().rev() {
-                log::trace!("Looking for edge at level {}: smol {:?}", i, small);
                 // Move all tree edges of level i to i + 1
                 while let Some(f_id) = self.find_level_i_tree_edge(i, small) {
-                    assert!(!self.edge_info[f_id].is_extra(), "tree edge is extra");
-                    assert_eq!(self.edge_info[f_id].level, i, "edge has wrong level");
+                    debug_assert!(!self.edge_info[f_id].is_extra(), "tree edge is extra");
+                    debug_assert_eq!(self.edge_info[f_id].level, i, "edge has wrong level");
                     self.add_level_to_edge(f_id);
                 }
                 // For all extra edges of level i, check if they replace the removed edge, and move them to level i + 1
                 while let Some(f_id) = self.find_level_i_extra_edge(i, small) {
                     let (a, b) = self.edge_info[f_id].e;
                     if !self.ett[i].is_connected(self.levels[i][a], self.levels[i][b]) {
-                        log::trace!("Extra edge ({a}, {b}) at level {i} will replace");
+                        log::trace!("Extra edge ({a}, {b}) at level {i} will replace ({u}, {v})");
                         assert!(self.lc_0.link(a, b));
                         self.rem_edge_id(f_id);
                         let mut rs = vec![];
@@ -577,30 +563,11 @@ where
                             e_id: f_id,
                         };
                         for j in 0..=i {
-                            assert!(!self.ett[j].is_connected(self.levels[j][u], self.levels[j][v]));
-                            assert!(
-                                !self.ett[j].is_connected(self.levels[j][a], self.levels[j][b]),
-                                "({}, {}) shouldn't be connected at level {}: {:?}",
-                                a,
-                                b,
-                                j,
-                                self
-                            );
                             let r = self.ett[j]
                                 .connect(self.levels[j][a], self.levels[j][b], e.clone(), e.clone())
                                 .expect("shouldn't be connected at previous level");
-                            assert!(self.ett[j].is_connected(self.levels[j][a], self.levels[j][b]));
-                            assert!(
-                                self.ett[j].is_connected(self.levels[j][u], self.levels[j][v]),
-                                "({}, {}) should be connected at level {}: {:?}",
-                                u,
-                                v,
-                                j,
-                                Dbg(self as &_, j, AllEdges),
-                            );
                             rs.push(r);
                         }
-                        assert!(self.edge_info[f_id].levels.is_none());
                         self.edge_info[f_id].levels = Some(rs);
                         self.add_edge_id(f_id);
                         return true;
@@ -627,11 +594,9 @@ where
                 if first == u {
                     return true;
                 }
-                let first_subtree = self.lc_0.kth_in_path_from_root(first, 1);
-                let last_subtree = self.lc_0.kth_in_path_from_root(last, 1);
-                // Different subtree means u is in their path, and thus either in a cycle
-                // or in a path between cycles
-                first_subtree != last_subtree
+                // Since u is the root, it is in the path between first and last iff it is
+                // their LCA. In which case it is either in a cycle or in a path between cycles.
+                u == self.lc_0.lca(first, last).expect("not on same tree")
             })
     }
 

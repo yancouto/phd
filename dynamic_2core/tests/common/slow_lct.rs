@@ -5,7 +5,17 @@ pub struct SlowLCT {
     parent: Vec<usize>,
 }
 
-impl SlowLCT {}
+impl SlowLCT {
+    fn path_from_root(&self, mut u: Node) -> Vec<Node> {
+        let mut path = vec![u];
+        while self.parent[u] != u {
+            u = self.parent[u];
+            path.push(u);
+        }
+        path.reverse();
+        path
+    }
+}
 
 impl LinkCutTree for SlowLCT {
     fn new(n: usize) -> Self {
@@ -46,14 +56,20 @@ impl LinkCutTree for SlowLCT {
         }
     }
 
-    fn kth_in_path_from_root(&mut self, u: Node, k: usize) -> Option<Node> {
-        let mut path = vec![u];
-        let mut last = u;
-        while self.parent[last] != last {
-            last = self.parent[last];
-            path.push(last);
+    fn lca(&mut self, u: Node, v: Node) -> Option<Node> {
+        let pu = self.path_from_root(u);
+        let pv = self.path_from_root(v);
+        if pu[0] != pv[0] {
+            None
+        } else {
+            Some(
+                pu.into_iter()
+                    .zip(pv)
+                    .take_while(|(a, b)| a == b)
+                    .last()
+                    .unwrap()
+                    .0,
+            )
         }
-        path.reverse();
-        path.get(k).copied()
     }
 }

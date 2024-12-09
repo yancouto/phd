@@ -107,18 +107,18 @@ where
         Self::test_2core();
     }
 
-    fn compare_with_dumb(seed: u64)
+    fn compare_with_slow(seed: u64)
     where
         T: std::fmt::Debug,
     {
         const N: usize = 25;
         let mut t1 = T::new(N);
-        let mut t2 = Dumb::new(N);
+        let mut t2 = Slow::new(N);
         let mut edges = vec![];
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         for q in 0..10000 {
             if q % 100 == 0 {
-                log::debug!("q {}", q);
+                log::debug!("q {q}");
             }
             if edges.is_empty() || rng.gen_bool(0.66) {
                 let mut u = rng.gen_range(0..N);
@@ -132,28 +132,17 @@ where
                 assert_eq!(added, t2.add_edge(u, v));
                 if added {
                     edges.push((u, v));
-                    log::trace!("Added edge {u} {v}");
                 }
             } else {
                 let idx = rng.gen_range(0..edges.len());
                 let (u, v) = edges.swap_remove(idx);
                 assert_eq!(t1.remove_edge(u, v), t2.remove_edge(u, v));
-                log::trace!("Removed edge {u} {v}");
             }
             if q % 10 == 0 {
                 let gs = t2.groups();
                 for u in 0..N {
                     for v in 0..N {
-                        assert_eq!(
-                            t1.is_connected(u, v),
-                            (gs[u] == gs[v]),
-                            "q {} u {} v {}\nt1\n{:?}\n\nt2\n{:?}",
-                            q,
-                            u,
-                            v,
-                            &t1,
-                            &t2
-                        );
+                        assert_eq!(t1.is_connected(u, v), (gs[u] == gs[v]));
                     }
                 }
                 assert_eq!(
@@ -165,24 +154,24 @@ where
     }
 }
 
-struct Dumb {
+struct Slow {
     adj: Vec<BTreeSet<usize>>,
     saved_core: Vec<bool>,
     invalidated: bool,
 }
 
-impl std::fmt::Debug for Dumb {
+impl std::fmt::Debug for Slow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v_to_id = self.groups();
         let mut gs = vec![vec![]; v_to_id.iter().copied().max().unwrap_or(0)];
         for (v, &id) in v_to_id.iter().enumerate() {
             gs[id - 1].push(v);
         }
-        f.debug_struct("Dumb").field("groups", &gs).finish()
+        f.debug_struct("Slow").field("groups", &gs).finish()
     }
 }
 
-impl Dumb {
+impl Slow {
     fn groups(&self) -> Vec<usize> {
         let mut groups = vec![0; self.adj.len()];
         let mut group_id = 0;
@@ -208,7 +197,7 @@ impl Dumb {
     }
 }
 
-impl Dynamic2CoreSolver for Dumb {
+impl Dynamic2CoreSolver for Slow {
     fn new(n: usize) -> Self {
         Self {
             adj: vec![BTreeSet::new(); n],
@@ -273,7 +262,7 @@ impl Dynamic2CoreSolver for Dumb {
 #[test]
 fn test_dumb() {
     init_logger();
-    D2CTests::<Dumb>::test_all();
+    D2CTests::<Slow>::test_all();
 }
 
 #[test]
@@ -297,45 +286,41 @@ fn test_lct_with_treap() {
 #[test]
 fn test_cmp_slow() {
     init_logger();
-    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_dumb(
+    D2CTests::<D2CSolver<SlowLists<ETAggregated<AgData>>, LCT<SlowLists>>>::compare_with_slow(
         9232345,
     );
 }
 #[test]
 fn test_dyn2core_cmp1() {
     init_logger();
-    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(9232345);
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_slow(9232345);
 }
 #[test]
 fn test_dyn2core_cmp2() {
-    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(100000007);
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_slow(100000007);
 }
 #[test]
 fn test_dyn2core_cmp3() {
-    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(3);
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_slow(3);
 }
 
-fn stress() {
-    init_logger();
-    loop {
-        let seed: u64 = thread_rng().gen();
-        log::info!("seed = {seed}");
-        D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(seed);
-    }
+fn stress_iter() {
+    let seed: u64 = thread_rng().gen();
+    log::info!("seed = {seed}");
+    D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_slow(seed);
 }
 
 #[test]
 #[ignore]
-fn test_stress() {
-    stress()
+fn test_dyn2core_stress() {
+    init_logger();
+    loop {
+        stress_iter();
+    }
 }
 
 #[bench]
-fn test_stress0(b: &mut test::Bencher) {
+fn test_dyn2core_bench(b: &mut test::Bencher) {
     init_logger();
-    b.iter(|| {
-        let seed: u64 = thread_rng().gen();
-        log::info!("seed = {seed}");
-        D2CTests::<D2CSolver<Treaps<ETAggregated<AgData>>, LCT<Treaps>>>::compare_with_dumb(seed);
-    })
+    b.iter(stress_iter)
 }

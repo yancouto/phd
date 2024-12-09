@@ -35,13 +35,7 @@ where
             assert_eq!(l.data(node).data(), x, "i = {}", i);
             node = l.next(node);
         }
-        assert!(l.is_empty(node));
-    }
-
-    fn assert_subtree_sizes(_nodes: &Vec<NodeRef>, _sizes: &[usize]) {
-        // for (i, size) in sizes.iter().enumerate() {
-        //     assert_eq!(nodes[i].subtree_size(), *size);
-        // }
+        assert_eq!(node, T::EMPTY);
     }
 
     fn assert_all_connections(t: &ETT<T>, nodes: &Vec<NodeRef>, is_conn: &[&str]) {
@@ -50,14 +44,6 @@ where
                 assert_eq!(t.is_connected(nodes[i], nodes[j]), c == '1');
             }
         }
-    }
-
-    fn assert_all_descendants(_nodes: &Vec<NodeRef>, _descendants: &[&str]) {
-        // for (i, conn) in descendants.iter().enumerate() {
-        //     for (j, c) in conn.chars().enumerate() {
-        //         assert_eq!(nodes[j].is_descendant_of(&nodes[i]), c == '1');
-        //     }
-        // }
     }
 
     fn connect(t: &mut ETT<T>, u: usize, v: usize, nodes: &Vec<NodeRef>) -> EdgeRef {
@@ -79,20 +65,14 @@ where
             &nodes[0],
             &[0, 01, 1, 12, 2, 23, 3, 34, 4, 43, 32, 21, 10],
         );
-        Self::assert_subtree_sizes(&nodes, &[5, 4, 3, 2, 1]);
         assert!(t.connect(nodes[0], nodes[2], 0, 0).is_none());
-        Self::assert_all_descendants(&nodes, &["11111", "01111", "00111", "00011", "00001"]);
         Self::assert_all_connections(&t, &nodes, &["11111", "11111", "11111", "11111", "11111"]);
         t.disconnect(edges[1]); // 1-2
         Self::assert_node_order(&t, &nodes[0], &[0, 01, 1, 10]);
         Self::assert_node_order(&t, &nodes[2], &[2, 23, 3, 34, 4, 43, 32]);
-        Self::assert_subtree_sizes(&nodes, &[2, 1, 3, 2, 1]);
-        Self::assert_all_descendants(&nodes, &["11000", "01000", "00111", "00011", "00001"]);
         Self::assert_all_connections(&t, &nodes, &["11000", "11000", "00111", "00111", "00111"]);
         t.reroot(nodes[3]);
         Self::assert_node_order(&t, &nodes[2], &[3, 34, 4, 43, 32, 2, 23]);
-        Self::assert_subtree_sizes(&nodes, &[2, 1, 1, 3, 1]);
-        Self::assert_all_descendants(&nodes, &["11000", "01000", "00100", "00111", "00001"]);
         Self::assert_all_connections(&t, &nodes, &["11000", "11000", "00111", "00111", "00111"]);
     }
 

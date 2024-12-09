@@ -42,6 +42,7 @@ impl<Ag: AggregatedData> SlowLists<Ag> {
     fn entry(&self, u: Idx) -> &Entry<Ag> {
         self.list(u).iter().find(|e| e.idx == u).unwrap()
     }
+    #[allow(dead_code)]
     pub fn lists(&self) -> Vec<Vec<Idx>> {
         self.lists
             .iter()
@@ -57,6 +58,8 @@ impl<Ag: AggregatedData> SlowLists<Ag> {
 }
 
 impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
+    const EMPTY: Idx = usize::MAX;
+
     fn new(capacity: usize) -> Self {
         let mut lists = Vec::with_capacity(capacity + 1);
         // SENTINEL for EMPTY
@@ -170,7 +173,6 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
             return (Self::EMPTY, Self::EMPTY, Self::EMPTY);
         }
         let lu = self.u_to_list[u];
-        log::trace!("u {u} split {l}..{r}");
         assert!(
             l <= r && r <= self.lists[lu].len(),
             "Invalid range {l}..{r}: {self:?}"

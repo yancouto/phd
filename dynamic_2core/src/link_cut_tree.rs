@@ -15,11 +15,9 @@ pub trait LinkCutTree {
     fn cut(&mut self, u: Node) -> Option<Node>;
     /// Makes u the root of its current tree.
     fn reroot(&mut self, u: Node);
-    /// The k-th vertex from the root of the tree containing u to u.
-    fn kth_in_path_from_root(&mut self, u: Node, k: usize) -> Option<Node>;
+    /// The lowest common ancestor of u and v. None if they are in different trees.
+    fn lca(&mut self, u: Node, v: Node) -> Option<Node>;
 }
-
-const NULL: usize = usize::MAX;
 
 #[derive(Debug)]
 pub struct LCT<L>
@@ -27,7 +25,7 @@ where
     L: Lists<()>,
 {
     l: L,
-    // Non-NULL iff the node is a root of a preferred path that is not the topmost.
+    // Non-EMPTY iff the node is a root of a preferred path that is not the topmost.
     parent: Vec<usize>,
 }
 
@@ -35,18 +33,23 @@ impl<L> LCT<L>
 where
     L: Lists<()>,
 {
-    fn access(&mut self, mut u: Node) {
-        let mut prev = L::EMPTY;
-        while u != NULL {
+    /// Returns the point where the access operation entered the topmost preferred path.
+    /// That is, returns the LCA of u with the last node that called access.
+    fn access(&mut self, mut u: Node) -> Node {
+        let mut prev_topmost = L::EMPTY;
+        let mut last_u = u;
+        while u != L::EMPTY {
             let (_, _, after) = self.l.split(u, ..=self.l.order(u));
             assert!(self.l.is_last(u));
             if after != L::EMPTY {
                 self.parent[self.l.first(after)] = u;
             }
-            self.l.concat(u, prev);
+            self.l.concat(u, prev_topmost);
+            last_u = u;
             u = self.l.first(u);
-            (u, prev) = (std::mem::replace(&mut self.parent[u], NULL), u);
+            (u, prev_topmost) = (std::mem::replace(&mut self.parent[u], L::EMPTY), u);
         }
+        last_u
     }
 }
 
@@ -61,7 +64,7 @@ where
         }
         Self {
             l,
-            parent: vec![NULL; n],
+            parent: vec![L::EMPTY; n],
         }
     }
 
@@ -96,9 +99,11 @@ where
         self.l.reverse(u);
     }
 
-    fn kth_in_path_from_root(&mut self, u: Node, k: usize) -> Option<Node> {
+    fn lca(&mut self, u: Node, v: Node) -> Option<Node> {
         self.access(u);
-        let v = self.l.find_kth(u, k);
-        (v != L::EMPTY).then_some(v)
+        let ru = self.l.first(u);
+        let lca = self.access(v);
+        let rv = self.l.first(v);
+        (ru == rv).then_some(lca)
     }
 }

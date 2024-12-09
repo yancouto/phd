@@ -54,7 +54,7 @@ where
     Self: Sized + Debug,
 {
     /// Returned when the node doesn't exist.
-    const EMPTY: Idx = usize::MAX;
+    const EMPTY: Idx;
     /// New Lists with given capacity.
     fn new(capacity: usize) -> Self;
     /// New Lists with given items already in a list.
@@ -91,12 +91,18 @@ where
     fn is_last(&self, u: Idx) -> bool {
         self.order(u) == self.len(u) - 1
     }
-    /// Next node after u in its list.
+    /// Node after u in its list.
     fn next(&self, u: Idx) -> Idx {
-        self.find_kth(self.root(u), self.order(u) + 1)
+        self.find_kth(u, self.order(u) + 1)
     }
+    /// Node before u in its list.
     fn prev(&self, u: Idx) -> Idx {
-        self.find_kth(self.root(u), self.order(u) - 1)
+        let k = self.order(u);
+        if k == 0 {
+            Self::EMPTY
+        } else {
+            self.find_kth(u, k - 1)
+        }
     }
     /// Are the two nodes on the same tree?
     fn on_same_list(&self, u: Idx, v: Idx) -> bool {
@@ -105,10 +111,6 @@ where
     /// Checks if the current node is the root of the tree.
     fn is_root(&self, u: Idx) -> bool {
         self.root(u) == u
-    }
-    /// Is the node the empty node?
-    fn is_empty(&self, u: Idx) -> bool {
-        u == Self::EMPTY
     }
     /// Find an element in the list containing u using a search strategy.
     fn find_element(
@@ -138,6 +140,7 @@ where
 
     /// Concats the lists containing u and v. Returns the new root.
     fn concat(&mut self, u: Idx, v: Idx) -> Idx;
+    /// Concats all given lists. Returns the new root.
     fn concat_all(&mut self, all: impl IntoIterator<Item = Idx>) -> Idx {
         let mut u = Self::EMPTY;
         for v in all {

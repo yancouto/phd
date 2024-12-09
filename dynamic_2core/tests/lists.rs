@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use common::{init_logger, log_traces, slow_lists::SlowLists, AggDigit, AggSum};
-use debug_tree::add_branch_to;
 use dynamic_2core::lists::*;
 use rand::prelude::*;
 use scopeguard::{OnUnwind, ScopeGuard};
@@ -15,7 +14,6 @@ use dynamic_2core::lists::treap::PrettyIdx as I;
 struct LTests<T: Lists<AggSum>>(std::marker::PhantomData<T>);
 
 fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data: &[i32]) {
-    add_branch_to!("test", "assert_data({u} = {data:?})");
     assert_eq!(l.len(u), data.len(), "{l:?}");
     let mut cur_u = l.first(u);
     assert!(l.is_first(cur_u));
@@ -28,7 +26,7 @@ fn assert_data<L: Lists<impl AggregatedData<Data = i32>>>(l: &L, u: usize, data:
         }
         cur_u = l.next(cur_u);
     }
-    assert!(l.is_empty(cur_u));
+    assert_eq!(cur_u, L::EMPTY);
 }
 
 fn guard<L: std::fmt::Debug>(l: L) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
@@ -37,13 +35,11 @@ fn guard<L: std::fmt::Debug>(l: L) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
 
 impl<L: Lists<AggSum>> LTests<L> {
     fn build(v: &[i32]) -> ScopeGuard<L, impl FnOnce(L), OnUnwind> {
-        add_branch_to!("test", "build({v:?})");
         let l = guard(L::from_iter(v.iter().copied()));
         Self::assert_data(&l, 0, v);
         l
     }
     fn add_list(l: &mut L, v: &[i32]) -> Idx {
-        add_branch_to!("test", "add_list({v:?})");
         let u = l.total_size();
         let mut last_root = u;
         for (i, &vi) in v.iter().enumerate() {
@@ -110,7 +106,7 @@ impl<L: Lists<AggSum>> LTests<L> {
         assert_eq!(l.data(l.find_kth(r, 3)), &8);
         assert_eq!(l.data(l.find_kth(r, 2)), &3);
         assert_eq!(l.data(l.find_kth(r, 0)), &1);
-        assert!(l.is_empty(l.find_kth(r, 6)));
+        assert_eq!(l.find_kth(r, 6), L::EMPTY);
         Self::assert_data(&l, r, &[1, 2, 3, 8, 12, 10]);
         let (r3, r4, r5) = (
             Self::add_list(&mut l, &[15, 20]),
@@ -208,9 +204,7 @@ impl<L: Lists<AggSum>> LTests<L> {
     fn test_find_element() {
         let l = Self::build(&[0, 0, 1, 0, 3, 0, 2, 0, 1, 1000]);
         let idx_of_kth_value = |mut k: i32, expected: Idx| {
-            log::trace!("Find {k}");
             let v = l.find_element(0, move |s: SearchData<'_, AggSum>| {
-                log::trace!("k {k} s {s:?}");
                 if s.left_agg.0 >= k {
                     SearchDirection::Left
                 } else if s.left_agg.0 + s.current_data >= k {
@@ -249,7 +243,7 @@ impl<L: Lists<AggSum>> LTests<L> {
 #[allow(non_snake_case)]
 fn random_compare_with_slow<L, Ag>(Q: usize, N: usize, range: std::ops::Range<i32>, seed: u64)
 where
-    Ag: AggregatedData<Data = i32>,
+    Ag: AggregatedData<Data = i32> + Eq,
     L: Lists<Ag>,
 {
     init_logger();
@@ -267,7 +261,7 @@ where
     }
     for q in 1..=Q {
         if q % 100 == 0 {
-            log::info!("q {q}");
+            log::debug!("q {q}");
         }
         if q == 0 {
             log_traces();
@@ -325,12 +319,13 @@ where
             }
         }
         if q % 30 == 0 {
+            assert_eq!(l.total_size(), sl.total_size());
             let mut roots = BTreeSet::new();
             let lists = sl.lists();
-            log::trace!("Double check against lists: {lists:?}");
             for (i, list) in lists.iter().enumerate() {
                 let any_u = *list.choose(rng).unwrap();
                 let root = l.root(any_u);
+                assert!(l.is_root(root));
                 for &r in &roots {
                     assert!(!l.on_same_list(any_u, r));
                 }
@@ -351,6 +346,14 @@ where
                     any_u,
                     &list.iter().map(|&u| *sl.data(u)).collect::<Vec<_>>(),
                 );
+                assert_eq!(l.total_agg(any_u), sl.total_agg(any_u));
+                // Test range_agg
+                for _ in 0..10 {
+                    let mut ab = [rng.gen_range(0..=list.len()), rng.gen_range(0..=list.len())];
+                    ab.sort();
+                    let &u = list.choose(rng).unwrap();
+                    assert_eq!(l.range_agg(u, ab[0]..ab[1]), sl.range_agg(u, ab[0]..ab[1]));
+                }
             }
         }
     }
@@ -398,7 +401,6 @@ fn test_slow_lists() {
 #[test]
 fn test_treap() {
     init_logger();
-    //defer_print!("test");
     LTests::<Treaps<AggSum>>::test_all();
     test_digits::<Treaps<AggDigit>>();
 }
@@ -414,4 +416,15 @@ fn test_treap_cmp2() {
 #[test]
 fn test_treap_cmp3() {
     random_compare_with_slow::<Treaps<AggDigit>, _>(10000, 8, 0..10, 4635);
+}
+
+#[test]
+#[ignore]
+fn test_treap_stress() {
+    init_logger();
+    loop {
+        let seed = thread_rng().gen();
+        log::info!("seed = {seed}");
+        random_compare_with_slow::<Treaps<AggSum>, _>(30000, 200, -100000..100000, seed);
+    }
 }
