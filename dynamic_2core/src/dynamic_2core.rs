@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    euler_tour_tree::{ETAggregated, ETData, EdgeRef, EulerTourTree, NodeRef},
+    euler_tour_tree::{EdgeRef, EulerTourTree, NodeRef},
     link_cut_tree::LinkCutTree,
     lists::{AggregatedData, Idx, Lists, SearchDirection},
 };
@@ -160,7 +160,7 @@ impl EdgeInfo {
 
 pub struct D2CSolver<L, LC>
 where
-    L: Lists<ETAggregated<AgData>>,
+    L: Lists<AgData>,
     LC: LinkCutTree,
 {
     // We can make this a single ETT, but it's easier to debug this way
@@ -178,7 +178,7 @@ where
 
 impl<L, LC> std::fmt::Debug for D2CSolver<L, LC>
 where
-    L: Lists<ETAggregated<AgData>>,
+    L: Lists<AgData>,
     LC: LinkCutTree,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -196,7 +196,7 @@ use DbgMode::*;
 
 impl<L, LC> D2CSolver<L, LC>
 where
-    L: Lists<ETAggregated<AgData>>,
+    L: Lists<AgData>,
     LC: LinkCutTree,
 {
     fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, mode: DbgMode) -> std::fmt::Result {
@@ -256,13 +256,12 @@ where
         if node == L::EMPTY {
             return;
         }
-        use ETData::*;
         match self.ett[lvl].inner_lists().data(node) {
-            Node(Data::Node {
+            Data::Node {
                 idx,
                 extra_edges,
                 any_extra_edges,
-            }) => {
+            } => {
                 assert_eq!(
                     self.u_level_to_extras
                         .get(&(*idx, lvl))
@@ -285,10 +284,7 @@ where
                     }
                 )
             }
-            Edge {
-                data: Data::Edge { e_id, level, .. },
-                other: _,
-            } => {
+            Data::Edge { e_id, level, .. } => {
                 assert!(*level >= lvl, "tree edge has level smaller than ETT level");
                 assert_eq!(
                     self.edge_info[*e_id].level, *level,
@@ -296,7 +292,6 @@ where
                 );
                 assert!(!self.edge_info[*e_id].is_extra(), "tree edge is extra");
             }
-            _ => panic!("Invalid data"),
         }
     }
     fn find_level_i_tree_edge(&mut self, i: Level, u: NodeRef) -> Option<EdgeId> {
@@ -312,7 +307,7 @@ where
             }
         });
         if found != L::EMPTY {
-            let (id, _) = self.ett[i].inner_lists().data(found).data().unwrap_edge();
+            let (id, _) = self.ett[i].inner_lists().data(found).unwrap_edge();
             self.assert_data(found, i);
             return Some(*id);
         }
@@ -332,7 +327,7 @@ where
         });
         if found != L::EMPTY {
             self.assert_data(found, i);
-            let (u, _) = self.ett[i].inner_lists().data(found).data().unwrap_node();
+            let (u, _) = self.ett[i].inner_lists().data(found).unwrap_node();
             let id = self.u_level_to_extras[&(*u, i)]
                 .first()
                 .expect("missing extra edge");
@@ -452,13 +447,13 @@ where
 
 impl<L, LC> Dynamic2CoreSolver for D2CSolver<L, LC>
 where
-    L: Lists<ETAggregated<AgData>>,
+    L: Lists<AgData>,
     LC: LinkCutTree,
 {
     fn new(n: usize) -> Self {
         let log2n = (n.next_power_of_two().trailing_zeros() as usize) + 1;
         let mut ett = (0..log2n)
-            .map(|_| EulerTourTree::new(n))
+            .map(|_| EulerTourTree::new(L::new(n)))
             .collect::<Vec<_>>();
         let levels = (0..log2n)
             .map(|lvl| {

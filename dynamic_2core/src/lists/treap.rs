@@ -448,4 +448,8 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         let u = self.root(u);
         self.nodes[u].flip_subtree ^= true;
     }
+
+    fn is_root(&self, u: Idx) -> bool {
+        self.parent(u) == Self::EMPTY
+    }
 }

@@ -1,6 +1,6 @@
 use common::{slow_lists::SlowLists, AggSum};
 use dynamic_2core::{
-    euler_tour_tree::{ETAggregated, EdgeRef, EulerTourTree, NodeRef},
+    euler_tour_tree::{EdgeRef, EulerTourTree, NodeRef},
     lists::{treap::Treaps, Lists},
 };
 
@@ -8,7 +8,7 @@ mod common;
 
 struct ETTTests<T>(std::marker::PhantomData<T>)
 where
-    T: Lists<ETAggregated<AggSum>>;
+    T: Lists<AggSum>;
 
 type ETT<T> = EulerTourTree<T, AggSum>;
 
@@ -16,29 +16,29 @@ fn e(u: usize, v: usize) -> i32 {
     (10 * u + v) as i32
 }
 
-impl<T> ETTTests<T>
+impl<L> ETTTests<L>
 where
-    T: Lists<ETAggregated<AggSum>>,
+    L: Lists<AggSum>,
 {
-    fn build(n: usize) -> (ETT<T>, Vec<NodeRef>) {
-        let mut t = ETT::new(n);
+    fn build(n: usize) -> (ETT<L>, Vec<NodeRef>) {
+        let mut t = ETT::new(L::new(n));
         let v: Vec<_> = (0..n).map(|i| t.create_node(i as i32)).collect();
         (t, v)
     }
 
     // Uses the data for nodes and for edges.
-    fn assert_node_order(t: &ETT<T>, root: &NodeRef, order: &[i32]) {
+    fn assert_node_order(t: &ETT<L>, root: &NodeRef, order: &[i32]) {
         let l = t.inner_lists();
         let mut node = l.first(root.inner_idx());
         assert_eq!(l.len(node), order.len());
         for (i, x) in order.iter().enumerate() {
-            assert_eq!(l.data(node).data(), x, "i = {}", i);
+            assert_eq!(l.data(node), x, "i = {}", i);
             node = l.next(node);
         }
-        assert_eq!(node, T::EMPTY);
+        assert_eq!(node, L::EMPTY);
     }
 
-    fn assert_all_connections(t: &ETT<T>, nodes: &Vec<NodeRef>, is_conn: &[&str]) {
+    fn assert_all_connections(t: &ETT<L>, nodes: &Vec<NodeRef>, is_conn: &[&str]) {
         for (i, conn) in is_conn.iter().enumerate() {
             for (j, c) in conn.chars().enumerate() {
                 assert_eq!(t.is_connected(nodes[i], nodes[j]), c == '1');
@@ -46,7 +46,7 @@ where
         }
     }
 
-    fn connect(t: &mut ETT<T>, u: usize, v: usize, nodes: &Vec<NodeRef>) -> EdgeRef {
+    fn connect(t: &mut ETT<L>, u: usize, v: usize, nodes: &Vec<NodeRef>) -> EdgeRef {
         t.connect(nodes[u], nodes[v], e(u, v), e(v, u)).unwrap()
     }
 

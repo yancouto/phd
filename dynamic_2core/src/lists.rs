@@ -3,9 +3,9 @@ use std::ops::RangeBounds;
 
 pub mod treap;
 
-pub trait AggregatedData: Debug + Sized + Clone + Default {
+pub trait AggregatedData: Debug + Clone + Default {
     // Should Data::reverse exist? Not necessary for us, but more generic.
-    type Data: Debug + Sized + Clone;
+    type Data: Debug + Clone;
     /// Create aggregated data from a single data item
     fn from(data: &Self::Data) -> Self;
     /// Merge two aggregated data items. The other item contains data of some (not necessarily all) items to the right.
@@ -51,14 +51,17 @@ pub type Idx = usize;
 pub trait Lists<Ag = ()>
 where
     Ag: AggregatedData,
-    Self: Sized + Debug,
+    Self: Debug,
 {
     /// Returned when the node doesn't exist.
     const EMPTY: Idx;
     /// New Lists with given capacity.
     fn new(capacity: usize) -> Self;
     /// New Lists with given items already in a list.
-    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> Self {
+    fn from_iter(data: impl IntoIterator<Item = Ag::Data>) -> Self
+    where
+        Self: Sized,
+    {
         let data = data.into_iter();
         let mut lists = Self::new(data.size_hint().0);
         for (i, data) in data.enumerate() {
@@ -86,7 +89,7 @@ where
     /// Position of u in its list, 0-indexed.
     fn order(&self, u: Idx) -> usize;
     fn is_first(&self, u: Idx) -> bool {
-        self.order(u) == 0
+        u == self.first(u)
     }
     fn is_last(&self, u: Idx) -> bool {
         self.order(u) == self.len(u) - 1

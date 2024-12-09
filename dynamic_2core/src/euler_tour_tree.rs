@@ -2,71 +2,6 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use crate::lists::{AggregatedData, Idx, Lists, SearchData, SearchDirection};
 
-#[derive(Clone)]
-pub enum ETData<Data> {
-    Node(Data),
-    Edge {
-        data: Data,
-        /// Reference to matching edge
-        other: Idx,
-    },
-}
-
-impl<Data: std::fmt::Debug> std::fmt::Debug for ETData<Data> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ETData::Node(data) => write!(f, "Node({:?})", data),
-            ETData::Edge { data, .. } => write!(f, ".{:?}.", data),
-            //ETData::Edge { .. } => write!(f, "."),
-        }
-    }
-}
-
-impl<Data> ETData<Data> {
-    pub fn data(&self) -> &Data {
-        match self {
-            ETData::Node(data) => data,
-            ETData::Edge { data, .. } => data,
-        }
-    }
-    pub fn data_mut(&mut self) -> &mut Data {
-        match self {
-            ETData::Node(data) => data,
-            ETData::Edge { data, .. } => data,
-        }
-    }
-    #[allow(dead_code)]
-    fn unwrap_node(&self) -> &Data {
-        match self {
-            ETData::Node(data) => data,
-            _ => panic!("Expected Node"),
-        }
-    }
-    #[allow(dead_code)]
-    fn unwrap_edge(&self) -> (&Data, &Idx) {
-        match self {
-            ETData::Edge { data, other } => (data, other),
-            _ => panic!("Expected Edge"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ETAggregated<Ag: AggregatedData>(Ag);
-
-impl<Ag: AggregatedData> AggregatedData for ETAggregated<Ag> {
-    type Data = ETData<Ag::Data>;
-    fn from(data: &Self::Data) -> Self {
-        Self(Ag::from(data.data()))
-    }
-    fn merge(self, right: Self) -> Self {
-        Self(self.0.merge(right.0))
-    }
-    fn reverse(self) -> Self {
-        Self(self.0.reverse())
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct NodeRef(Idx);
 // Edges will be idx and idx + 1
@@ -75,7 +10,7 @@ pub struct EdgeRef(Idx);
 
 pub struct EulerTourTree<L, Ag>
 where
-    L: Lists<ETAggregated<Ag>>,
+    L: Lists<Ag>,
     Ag: AggregatedData,
 {
     l: L,
@@ -84,7 +19,7 @@ where
 
 impl<BST, Ag> std::fmt::Debug for EulerTourTree<BST, Ag>
 where
-    BST: Lists<ETAggregated<Ag>>,
+    BST: Lists<Ag>,
     Ag: AggregatedData,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -94,10 +29,7 @@ where
                 write!(f, "<")?;
                 for i in 0..self.l.len(u) {
                     let j = self.l.find_kth(u, i);
-                    match self.l.data(j) {
-                        ETData::Node(d) => write!(f, "{j}{d:?} ")?,
-                        ETData::Edge { data, .. } => write!(f, "{j}[{data:?}] ")?,
-                    }
+                    write!(f, "{j}{d:?} ", d = self.l.data(j))?;
                 }
                 write!(f, "> ")?;
             }
@@ -123,18 +55,18 @@ impl EdgeRef {
 
 impl<L, Ag> EulerTourTree<L, Ag>
 where
-    L: Lists<ETAggregated<Ag>>,
+    L: Lists<Ag>,
     Ag: AggregatedData,
 {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(l: L) -> Self {
         Self {
-            l: L::new(capacity),
+            l,
             _phantom: PhantomData,
         }
     }
 
     pub fn create_node(&mut self, node_data: Ag::Data) -> NodeRef {
-        NodeRef(self.l.create(ETData::Node(node_data)))
+        NodeRef(self.l.create(node_data))
     }
 
     /// Makes the given node the root of its tree.
@@ -154,15 +86,8 @@ where
     ) -> EdgeRef {
         debug_assert!(!self.l.on_same_list(u.0, root_w.0));
         debug_assert!(self.l.is_first(root_w.0));
-        let mx = self.l.total_size();
-        let uw = self.l.create(ETData::Edge {
-            data: uw_data,
-            other: mx + 1,
-        }); // uw
-        let wu = self.l.create(ETData::Edge {
-            data: wu_data,
-            other: uw,
-        }); // wu
+        let uw = self.l.create(uw_data); // uw
+        let wu = self.l.create(wu_data); // wu
 
         // "AAA u BBB" and "w CCC" (it is root) becomes
         // AAA u uw w CCC wu BBB
@@ -208,15 +133,9 @@ where
     pub fn find_element(
         &mut self,
         u: NodeRef,
-        mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
+        search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
-        self.l.find_element(u.0, |d| {
-            search_strategy(SearchData {
-                current_data: d.current_data.data(),
-                left_agg: &d.left_agg.0,
-                right_agg: &d.right_agg.0,
-            })
-        })
+        self.l.find_element(u.0, search_strategy)
     }
 
     /// Number of nodes in the whole tree this node is contained in.
@@ -230,28 +149,19 @@ where
     }
 
     pub fn data(&self, u: NodeRef) -> &Ag::Data {
-        self.l.data(u.0).data()
+        self.l.data(u.0)
     }
 
     pub fn mutate_data(&mut self, u: NodeRef, f: impl FnOnce(&mut Ag::Data)) {
-        self.l.mutate_data(u.0, |d| f(d.data_mut()))
+        self.l.mutate_data(u.0, f)
     }
 
     pub fn edata(&self, e: EdgeRef) -> [&Ag::Data; 2] {
-        [self.l.data(e.0).data(), self.l.data(e.0 + 1).data()]
+        [self.l.data(e.0), self.l.data(e.0 + 1)]
     }
 
     pub fn mutate_edata(&mut self, e: EdgeRef, direction: bool, f: impl FnOnce(&mut Ag::Data)) {
-        self.l
-            .mutate_data(e.0 + (direction as usize), |d| f(d.data_mut()))
-    }
-
-    pub fn try_node(&self, u: Idx) -> Option<NodeRef> {
-        if matches!(self.l.data(u), ETData::Node(_)) {
-            Some(NodeRef(u))
-        } else {
-            None
-        }
+        self.l.mutate_data(e.0 + (direction as usize), f)
     }
 
     pub fn deb_ord(&self, u: Idx, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -260,10 +170,7 @@ where
     {
         let r = self.l.root(u);
         let mut all_data: Vec<_> = (0..self.l.len(r))
-            .filter_map(|i| match self.l.data(self.l.find_kth(r, i)) {
-                ETData::Node(d) => Some(d),
-                _ => None,
-            })
+            .map(|i| self.l.data(self.l.find_kth(r, i)))
             .collect();
         all_data.sort();
         for d in all_data {
