@@ -2,6 +2,10 @@
 name = "dynamic_2core"
 version = "0.1.0"
 edition = "2021"
+default-run = "example"
+
+[[bin]]
+name = "example"
 
 [dependencies]
 log = "0.4"

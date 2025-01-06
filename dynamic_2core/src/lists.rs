@@ -3,51 +3,9 @@ use std::ops::RangeBounds;
 
 pub mod treap;
 
-pub trait AggregatedData: Debug + Clone + Default {
-    // Should Data::reverse exist? Not necessary for us, but more generic.
-    type Data: Debug + Clone;
-    /// Create aggregated data from a single data item
-    fn from(data: &Self::Data) -> Self;
-    /// Merge two aggregated data items. The other item contains data of some (not necessarily all) items to the right.
-    fn merge(self, right: Self) -> Self;
-    /// Reverses the aggregated data. Used for reversing the list.
-    fn reverse(self) -> Self;
-}
-
-impl AggregatedData for () {
-    type Data = ();
-    fn from(_: &Self::Data) -> Self {
-        ()
-    }
-    fn merge(self, _: Self) -> Self {
-        ()
-    }
-    fn reverse(self) -> Self {
-        ()
-    }
-}
-
-#[derive(Debug)]
-pub struct SearchData<'a, Ag: AggregatedData> {
-    /// Data of the current node being looked at.
-    pub current_data: &'a Ag::Data,
-    /// Aggregated data of the left subtree.
-    pub left_agg: &'a Ag,
-    /// Aggregated data of the right subtree.
-    pub right_agg: &'a Ag,
-}
-
-#[derive(Debug)]
-pub enum SearchDirection {
-    Found,
-    NotFound,
-    Left,
-    Right,
-}
-
 pub type Idx = usize;
 
-/// This stores multiple ordered lists of values. Use keys in 0..n.
+/// This data structure stores multiple ordered lists of values. Use keys in 0..n.
 pub trait Lists<Ag = ()>
 where
     Ag: AggregatedData,
@@ -72,7 +30,7 @@ where
         }
         lists
     }
-    /// Create a new node with given data. Returns its index, which increase from 0.
+    /// Create a new node with given data. Returns its index, which increases from 0.
     fn create(&mut self, data: Ag::Data) -> Idx;
     /// Number of nodes in all lists.
     fn total_size(&self) -> usize;
@@ -162,6 +120,35 @@ where
     fn reverse(&mut self, u: Idx);
 }
 
+pub trait AggregatedData: Debug + Clone + Default {
+    // Should Data::reverse exist? Not necessary for us, but more generic.
+    type Data: Debug + Clone;
+    /// Create aggregated data from a single data item
+    fn from(data: &Self::Data) -> Self;
+    /// Merge two aggregated data items. The other item contains data of some (not necessarily all) items to the right.
+    fn merge(self, right: Self) -> Self;
+    /// Reverses the aggregated data. Used for reversing the list.
+    fn reverse(self) -> Self;
+}
+
+#[derive(Debug)]
+pub struct SearchData<'a, Ag: AggregatedData> {
+    /// Data of the current node being looked at.
+    pub current_data: &'a Ag::Data,
+    /// Aggregated data of the left subtree.
+    pub left_agg: &'a Ag,
+    /// Aggregated data of the right subtree.
+    pub right_agg: &'a Ag,
+}
+
+#[derive(Debug)]
+pub enum SearchDirection {
+    Found,
+    NotFound,
+    Left,
+    Right,
+}
+
 fn range_to_lr(range: impl RangeBounds<usize>, len: impl FnOnce() -> usize) -> [usize; 2] {
     use std::ops::Bound::*;
     let start = match range.start_bound() {
@@ -175,4 +162,17 @@ fn range_to_lr(range: impl RangeBounds<usize>, len: impl FnOnce() -> usize) -> [
         Unbounded => len(),
     };
     [start, end]
+}
+
+impl AggregatedData for () {
+    type Data = ();
+    fn from(_: &Self::Data) -> Self {
+        ()
+    }
+    fn merge(self, _: Self) -> Self {
+        ()
+    }
+    fn reverse(self) -> Self {
+        ()
+    }
 }

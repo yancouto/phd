@@ -1,3 +1,5 @@
+/// A Treap, or Cartesian Tree, is a BST that is also a heap for randomized priorities.
+/// It is expected to be balanced and have logarithmic time complexity for all operations.
 use std::fmt::{Debug, Display, Formatter};
 
 use debug_tree::{add_branch_to, add_leaf_to, AsTree, TreeBuilder};

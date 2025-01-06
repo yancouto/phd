@@ -15,9 +15,9 @@ pub trait Dynamic2CoreSolver {
     fn remove_edge(&mut self, u: usize, v: usize) -> bool;
     /// Check if u and v are connected.
     fn is_connected(&self, u: usize, v: usize) -> bool;
-    /// Check if u is in the 2-core.
+    /// Check if u is in the 2-core, that is, if it is contained in a subgraph with minimum degree 2.
     fn is_in_2core(&mut self, u: usize) -> bool;
-    /// Check if u is in the 1-core.
+    /// Check if u is in the 1-core, that is, if it is contained in a subgraph with minimum degree 1.
     fn is_in_1core(&self, u: usize) -> bool;
 }
 
