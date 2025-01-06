@@ -1,16 +1,16 @@
-use dynamic_2core::{dynamic_2core_solver, Dynamic2CoreSolver};
+use dynamic_2core::{Dynamic2CoreSolver, FastDynamic2CoreSolver};
 
-fn add_edge(t: &mut impl Dynamic2CoreSolver, u: usize, v: usize) {
+fn add_edge(t: &mut FastDynamic2CoreSolver, u: usize, v: usize) {
     println!("Adding edge from {} to {}", u, v);
     t.add_edge(u, v);
 }
 
-fn rem_edge(t: &mut impl Dynamic2CoreSolver, u: usize, v: usize) {
+fn rem_edge(t: &mut FastDynamic2CoreSolver, u: usize, v: usize) {
     println!("Removing edge from {} to {}", u, v);
     t.remove_edge(u, v);
 }
 
-fn is_2_core(t: &mut impl Dynamic2CoreSolver, u: usize) {
+fn is_2_core(t: &mut FastDynamic2CoreSolver, u: usize) {
     println!(
         "Is {} in the 2-core? {}",
         u,
@@ -19,7 +19,7 @@ fn is_2_core(t: &mut impl Dynamic2CoreSolver, u: usize) {
 }
 
 fn main() {
-    let mut t = dynamic_2core_solver(10);
+    let mut t = FastDynamic2CoreSolver::new(10);
     for u in 0..9 {
         t.add_edge(u, u + 1);
     }

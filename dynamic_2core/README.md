@@ -4,16 +4,16 @@ This project implements a dynamic 2-core solver for graphs. The solver supports 
 
 The 2-core of a graph is its maximal subgraph where all vertices have degree at least 2. This solver also implements connectivity queries using the HDT algorithm.
 
-All operations take O(lg² n) amortized time.
+All operations with `FastDynamic2CoreSolver` take O(lg² n) amortized time.
 
 ## Usage
 
-To use the dynamic 2-core solver, create an instance using the `dynamic_2core_solver` function and use the provided methods to add or remove edges and query the graph. 
+To use the dynamic 2-core solver, create an instance using `FastDynamic2CoreSolver::new` and use the methods provided on `Dynamic2CoreSolver` to add, remove edges and query the graph. 
 
 ```rust
-use dynamic_2core::{dynamic_2core_solver, Dynamic2CoreSolver};
+use dynamic_2core::{FastDynamic2CoreSolver, Dynamic2CoreSolver};
 
-let mut solver = dynamic_2core_solver(10);
+let mut solver = FastDynamic2CoreSolver::new(10);
 solver.add_edge(1, 2);
 solver.add_edge(2, 3);
 assert!(solver.is_connected(1, 3));
