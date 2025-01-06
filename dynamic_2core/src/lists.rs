@@ -1,3 +1,5 @@
+//! Implementation of order-based list data structures, with aggregated data.
+
 use std::fmt::Debug;
 use std::ops::RangeBounds;
 

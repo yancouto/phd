@@ -1,3 +1,5 @@
+//! Link Cut Tree implementation, without aggregated data.
+
 use crate::lists::Lists;
 
 pub type Node = usize;

@@ -1,3 +1,5 @@
+//! Implementation of the dynamic 2-core solver, using ETTs and LCTs.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
@@ -6,6 +8,7 @@ use crate::{
     lists::{AggregatedData, Idx, SearchDirection},
 };
 
+/// Trait defining the operations of the dynamic 2-core solver.
 pub trait Dynamic2CoreSolver {
     /// New instance for an empty graph on n nodes
     fn new(n: usize) -> Self;
@@ -24,6 +27,7 @@ pub trait Dynamic2CoreSolver {
 type Level = usize;
 type Node = usize;
 type EdgeId = usize;
+/// Data used in the Euler Tour Tree
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Data {
     Node {
@@ -80,6 +84,7 @@ impl Data {
     }
 }
 
+/// Aggregated [Data] for the Euler Tour Tree
 #[derive(Debug, Clone)]
 pub struct AgData {
     /// Minimum level of edge in range
@@ -131,6 +136,7 @@ impl AggregatedData for AgData {
     }
 }
 
+/// All information regarding an edge
 #[derive(Debug)]
 struct EdgeInfo {
     /// u < v
@@ -147,16 +153,18 @@ impl EdgeInfo {
     }
 }
 
+/// Data structure for solving the dynamic 2-core problem using Euler Tour Trees and Link Cut Trees.
 pub struct D2CSolver<ETT, LC>
 where
     ETT: EulerTourTree<AgData>,
     LC: LinkCutTree,
 {
+    /// Number of nodes of the graph, never changes.
     n: usize,
-    // ETT for each level
+    /// ETT for each level in the HDT algorithm.
     ett: Vec<ETT>,
     edge_info: Vec<EdgeInfo>,
-    // (u, v) -> position on edge_info array
+    /// (u, v) -> position on [edge_info] array
     e_to_id: BTreeMap<(Node, Node), usize>,
     /// Only exists for extra edges
     u_level_to_extras: BTreeMap<(Node, Level), BTreeSet<EdgeId>>,

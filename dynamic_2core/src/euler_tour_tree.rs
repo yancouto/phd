@@ -1,3 +1,5 @@
+//! Euler Tour Tree implementation, with custom aggregated data.
+
 use std::{fmt::Debug, marker::PhantomData};
 
 use crate::lists::{AggregatedData, Idx, Lists, SearchData, SearchDirection};
