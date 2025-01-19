@@ -4,7 +4,8 @@ use crate::lists::Lists;
 
 pub type Node = usize;
 
-/// Maintains a collection of trees dynamically.
+/// Interface of a Link Cut Tree.
+/// It maintains a collection of trees dynamically. This implementation doesn't have any data associated with the nodes.
 pub trait LinkCutTree {
     /// Create a new LinkCutTree with n vertices and no edges.
     fn new(n: usize) -> Self;

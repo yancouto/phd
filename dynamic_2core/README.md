@@ -26,7 +26,13 @@ You can see example usage at `src/bin/example.rs` and run it with `cargo run`.
 
 ## Implementation
 
-This uses Euler Tour Trees and Link Cut Trees, which in turn also use Treaps. All data structures can be used independently from the 2-core solver. If we use Splay Trees on the Link Cut Trees instead of Treaps, the time complexity of all operations except `remove_edge` can be reduced to amortized O(lg n).
+This uses Euler Tour Trees and Link Cut Trees, which in turn also use Treaps. All data structures can be used independently of the 2-core solver. If we use Splay Trees on the Link Cut Trees instead of Treaps, the time complexity of all operations except `remove_edge` can be reduced to amortized O(lg n).
+
+To read the implementation of the algorithm, see `impl Dynamic2CoreSolve for D2CSolver` in `src/dynamic_2core.rs`.
+For the data structures:
+- Treaps: see `impl Lists for Treaps` in `src/lists/treap.rs`.
+- Link Cut Tree: see `impl LinkCutTree for LCT` in `src/link_cut_tree.rs`.
+- Euler Tour Tree: see `impl EulerTourTree for ETT` in `src/euler_tour_tree.rs`.
 
 ## Testing
 

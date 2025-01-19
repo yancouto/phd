@@ -8,6 +8,8 @@ use crate::lists::{AggregatedData, Idx, Lists, SearchData, SearchDirection};
 #[derive(Debug, Clone, Copy)]
 pub struct EdgeRef(Idx);
 
+/// Interface of an Euler Tour Tree
+/// It maintains a collection of euler tours on a forest of trees. Each node and edge might have associated data, which can be aggregated.
 pub trait EulerTourTree<Ag: AggregatedData> {
     const EMPTY: Idx;
     /// Creates a new Euler Tour Tree with nodes given by the data and no edges.
@@ -31,8 +33,11 @@ pub trait EulerTourTree<Ag: AggregatedData> {
     ) -> Idx;
     /// Returns data of the node. Can be used for normal nodes, or from Idx of edges returned by find_element.
     fn data(&self, u: Idx) -> &Ag::Data;
+    /// Modifies the data on a given node
     fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data));
+    /// Returns the data of the edge.
     fn edata(&self, e: EdgeRef) -> [&Ag::Data; 2];
+    /// Modifies the data of the edge. The direction is given by a boolean.
     fn mutate_edata(&mut self, e: EdgeRef, direction: bool, f: impl FnOnce(&mut Ag::Data));
 }
 

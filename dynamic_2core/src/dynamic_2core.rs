@@ -372,6 +372,7 @@ where
     }
 }
 
+/// Implementation of main dyn2core methods for the solver
 impl<ETT, LC> Dynamic2CoreSolver for D2CSolver<ETT, LC>
 where
     ETT: EulerTourTree<AgData>,
