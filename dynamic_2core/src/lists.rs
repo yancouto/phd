@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::ops::RangeBounds;
 
+pub mod splay;
 pub mod treap;
 
 pub type Idx = usize;

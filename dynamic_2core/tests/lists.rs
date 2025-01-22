@@ -4,6 +4,7 @@ use common::{init_logger, log_traces, slow_lists::SlowLists, AggDigit, AggSum};
 use dynamic_2core::lists::*;
 use rand::prelude::*;
 use scopeguard::{OnUnwind, ScopeGuard};
+use splay::Splays;
 use treap::Treaps;
 
 mod common;
@@ -406,6 +407,13 @@ fn test_treap() {
 }
 
 #[test]
+fn test_splay() {
+    init_logger();
+    LTests::<Splays<AggSum>>::test_all();
+    test_digits::<Splays<AggDigit>>();
+}
+
+#[test]
 fn test_treap_cmp1() {
     random_compare_with_slow::<Treaps<AggSum>, _>(5000, 100, -100000..100000, 10000);
 }
@@ -419,6 +427,19 @@ fn test_treap_cmp3() {
 }
 
 #[test]
+fn test_splay_cmp1() {
+    random_compare_with_slow::<Splays<AggSum>, _>(5000, 100, -100000..100000, 10000);
+}
+#[test]
+fn test_splay_cmp2() {
+    random_compare_with_slow::<Splays<AggSum>, _>(500, 1000, -100000..100000, 74828);
+}
+#[test]
+fn test_splay_cmp3() {
+    random_compare_with_slow::<Splays<AggDigit>, _>(10000, 8, 0..10, 4635);
+}
+
+#[test]
 #[ignore]
 fn test_treap_stress() {
     init_logger();
@@ -426,5 +447,16 @@ fn test_treap_stress() {
         let seed = thread_rng().gen();
         log::info!("seed = {seed}");
         random_compare_with_slow::<Treaps<AggSum>, _>(30000, 200, -100000..100000, seed);
+    }
+}
+
+#[test]
+#[ignore]
+fn test_splay_stress() {
+    init_logger();
+    loop {
+        let seed = thread_rng().gen();
+        log::info!("seed = {seed}");
+        random_compare_with_slow::<Splays<AggSum>, _>(30000, 200, -100000..100000, seed);
     }
 }
