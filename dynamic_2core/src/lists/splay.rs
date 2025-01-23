@@ -65,10 +65,13 @@ impl<Ag: AggregatedData> Node<Ag> {
         }
     }
 
-    fn side_of(&self, p: Idx, flip: bool) -> Option<bool> {
-        (p == self.child[0])
-            .then_some(self.d_flip ^ flip)
-            .or_else(|| (p == self.child[1]).then_some(!(flip ^ self.d_flip)))
+    fn side_of(&self, u: Idx, flip: bool) -> Option<bool> {
+        let flip = flip ^ self.d_flip;
+        match self.child {
+            [l, _] if l == u => Some(flip),
+            [_, r] if r == u => Some(!flip),
+            _ => None,
+        }
     }
 
     fn agg(&self) -> Ag {

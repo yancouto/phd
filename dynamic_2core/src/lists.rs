@@ -23,11 +23,9 @@ where
     where
         Self: Sized,
     {
-        println!("from_iter");
         let data = data.into_iter();
         let mut lists = Self::new(data.size_hint().0);
         for (i, data) in data.enumerate() {
-            println!("data {i} {data:?}");
             lists.create(data);
             if i > 0 {
                 lists.concat(i - 1, i);
