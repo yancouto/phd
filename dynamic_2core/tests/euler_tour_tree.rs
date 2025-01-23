@@ -1,7 +1,7 @@
 use common::{slow_lists::SlowLists, AggSum};
 use dynamic_2core::{
     euler_tour_tree::{EdgeRef, EulerTourTree},
-    lists::{treap::Treaps, Idx, Lists},
+    lists::{splay::Splays, treap::Treaps, Idx, Lists},
 };
 
 mod common;
@@ -95,4 +95,9 @@ fn test_ett_with_slow_lists() {
 #[test]
 fn test_ett_with_treap() {
     ETTTests::<Treaps<_>>::test_all();
+}
+
+#[test]
+fn test_ett_with_splay() {
+    ETTTests::<Splays<_>>::test_all();
 }

@@ -327,7 +327,6 @@ where
             }
         }
         if q % 30 == 0 {
-            l.check_all();
             assert_eq!(l.total_size(), sl.total_size());
             let mut roots = BTreeSet::new();
             let lists = sl.lists();

@@ -1,14 +1,17 @@
 #![feature(test)]
 extern crate test;
 use rand::{thread_rng, Rng, SeedableRng};
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    time::{Duration, Instant},
+};
 
 use common::{init_logger, slow_lct::SlowLCT, slow_lists::SlowLists};
 use dynamic_2core::{
     dynamic_2core::{AgData, D2CSolver, Dynamic2CoreSolver},
     euler_tour_tree::ETT,
     link_cut_tree::LCT,
-    lists::treap::Treaps,
+    lists::{splay::Splays, treap::Treaps},
 };
 
 mod common;
@@ -287,6 +290,12 @@ fn test_lct_with_treap() {
 }
 
 #[test]
+fn test_lct_with_splay() {
+    init_logger();
+    D2CTests::<D2CSolver<TreapETT, LCT<Splays>>>::test_all();
+}
+
+#[test]
 fn test_cmp_slow() {
     init_logger();
     D2CTests::<D2CSolver<SlowETT, LCT<SlowLists>>>::compare_with_slow(9232345);
@@ -294,29 +303,42 @@ fn test_cmp_slow() {
 #[test]
 fn test_dyn2core_cmp1() {
     init_logger();
-    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(9232345);
+    D2CTests::<D2CSolver<TreapETT, LCT<Splays>>>::compare_with_slow(9232345);
 }
 #[test]
 fn test_dyn2core_cmp2() {
-    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(100000007);
+    D2CTests::<D2CSolver<TreapETT, LCT<Splays>>>::compare_with_slow(100000007);
 }
 #[test]
 fn test_dyn2core_cmp3() {
-    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(3);
+    D2CTests::<D2CSolver<TreapETT, LCT<Splays>>>::compare_with_slow(3);
 }
 
 fn stress_iter() {
     let seed: u64 = thread_rng().gen();
     log::info!("seed = {seed}");
-    D2CTests::<D2CSolver<TreapETT, LCT<Treaps>>>::compare_with_slow(seed);
+    D2CTests::<D2CSolver<TreapETT, LCT<Splays>>>::compare_with_slow(seed);
 }
 
 #[test]
 #[ignore]
 fn test_dyn2core_stress() {
     init_logger();
+    let start = Instant::now();
+    let mut last_log = Instant::now();
+    let mut i = 0;
     loop {
         stress_iter();
+        i += 1;
+        let now = Instant::now();
+        if now - last_log >= Duration::from_secs(15) {
+            last_log = now;
+            log::info!(
+                "{i} iterations in {dt:?} ({ps} secs/it)",
+                dt = now - start,
+                ps = (now - start).as_secs_f64() / (i as f64)
+            );
+        }
     }
 }
 
