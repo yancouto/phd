@@ -1,9 +1,4 @@
-#![feature(test)]
-extern crate test;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    hint::black_box,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use common::{init_logger, log_traces, slow_lists::SlowLists, AggDigit, AggSum};
 use dynamic_2core::lists::*;
@@ -472,61 +467,4 @@ fn test_splay_stress() {
         log::info!("seed = {seed}");
         random_compare_with_slow::<Splays<AggSum>, _>(30000, 200, -100000..100000, seed);
     }
-}
-
-fn bench_list<L: Lists<AggSum>>(b: &mut test::Bencher, seed: u64) {
-    const N: usize = 25;
-    const Q: usize = 100;
-    b.iter(|| {
-        let mut l = black_box(L::new(N));
-        for i in 0..N {
-            l.create(i as i32);
-        }
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        for _q in 0..Q {
-            match rng.gen_range(0..100) {
-                // concat
-                0..33 => {
-                    let u = rng.gen_range(0..N);
-                    let v = rng.gen_range(0..N);
-                    black_box(l.concat(u, v));
-                }
-                // split
-                33..66 => {
-                    let u = rng.gen_range(0..N);
-                    let sz = l.len(u);
-                    let ql = rng.gen_range(0..sz);
-                    let qr = rng.gen_range(ql..=sz);
-                    black_box(l.split(u, ql..qr));
-                }
-                // reverse
-                66..77 => {
-                    let u = rng.gen_range(0..N);
-                    black_box(l.reverse(u));
-                }
-                // Same list query
-                77..88 => {
-                    let (u, v) = (rng.gen_range(0..N), rng.gen_range(0..N));
-                    black_box(l.on_same_list(u, v));
-                }
-                // range query
-                _ => {
-                    let u = rng.gen_range(0..N);
-                    let sz = l.len(u);
-                    let ql = rng.gen_range(0..sz);
-                    let qr = rng.gen_range(ql..=sz);
-                    black_box(l.range_agg(u, ql..qr));
-                }
-            }
-        }
-    });
-}
-
-#[bench]
-fn bench_list_splay(b: &mut test::Bencher) {
-    bench_list::<Splays<AggSum>>(b, 4815162342);
-}
-#[bench]
-fn bench_list_treap(b: &mut test::Bencher) {
-    bench_list::<Treaps<AggSum>>(b, 4815162342);
 }
