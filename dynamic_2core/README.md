@@ -26,7 +26,7 @@ You can see example usage at `src/bin/example.rs` and run it with `cargo run`.
 
 ## Implementation
 
-This uses Euler Tour Trees and Link Cut Trees, which in turn also use Splay Trees and Treaps (Cartesian Trees). All data structures can be used independently of the 2-core solver. In theory Link Cut Trees only have O(lg n) time guarantees, instead of O(lg² n), when used with Splay Trees, but in practice they work faster with Treaps.
+This uses Euler Tour Trees and Link Cut Trees, which in turn also use Splay Trees and Treaps (Cartesian Trees). All data structures can be used independently of the 2-core solver. In theory Link Cut Trees only have improved time guarantees (O(lg n) vs O(lg² n)) when used with Splay Trees, but in practice they work faster with Treaps.
 
 To read the implementation of the algorithm, see `impl Dynamic2CoreSolve for D2CSolver` in `src/dynamic_2core.rs`.
 For the data structures:
@@ -43,4 +43,4 @@ Run the tests using:
 cargo test
 ```
 
-Add `-- --ignored` to run the stress tests (which run indefinitely with random data until they fail).
+Add `-- --ignored` to run the stress tests (which run indefinitely with random data until they fail). And use `cargo bench` to see the benchmarks.

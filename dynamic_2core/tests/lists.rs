@@ -104,6 +104,7 @@ impl<L: Lists<AggSum>> LTests<L> {
     fn test_concat() {
         let (l, r1) = (&mut Self::build(&[1, 2, 3]), 0);
         let r2 = Self::add_list(l, &[8, 12, 10]);
+        l.concat(r1, r1); // Don't crash with concating the same element
         let r = l.concat(r1, r2);
         assert_eq!(l.total_agg(r), 36);
         let (r3, r2, r0) = (l.find_kth(r, 3), l.find_kth(r, 2), l.find_kth(r, 0));

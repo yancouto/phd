@@ -123,6 +123,12 @@ where
     fn split_lr(&mut self, u: Idx, l: usize, r: usize) -> (Idx, Idx, Idx);
     /// Reverse the whole list containing u.
     fn reverse(&mut self, u: Idx);
+    /// Optional function that might verify the structure is correctly built. Used for testing.
+    fn check_all(&self)
+    where
+        Ag: Eq,
+    {
+    }
 }
 
 pub trait AggregatedData: Debug + Clone + Default {

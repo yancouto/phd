@@ -4,8 +4,12 @@ version = "0.1.0"
 edition = "2021"
 default-run = "example"
 
+[lib]
+bench = false
+
 [[bin]]
 name = "example"
+bench = false
 
 [dependencies]
 log = "0.4"

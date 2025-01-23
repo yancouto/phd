@@ -312,6 +312,12 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     fn total_size(&self) -> usize {
         self.n.len()
     }
+    fn check_all(&self)
+    where
+        Ag: Eq,
+    {
+        self.check_all();
+    }
 
     fn root(&mut self, mut u: Idx) -> Idx {
         if u == Self::EMPTY {
@@ -437,7 +443,8 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
         let v = self.first(v);
         self.splay(u);
-        if v == Self::EMPTY {
+        // v == null or they are in the same list already
+        if v == Self::EMPTY || u == v || self.n[v].parent != Self::EMPTY {
             return u;
         }
         assert_eq!(self.replace_child(v, false, u), Self::EMPTY);
@@ -465,5 +472,37 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
         if u != Self::EMPTY {
             self.n[u].d_flip ^= true;
         }
+    }
+}
+
+#[test]
+fn test_splay_splay() {
+    let _logger = flexi_logger::Logger::try_with_env()
+        .unwrap()
+        .start()
+        .unwrap();
+
+    let l = &mut Splays::<()>::new(10);
+    for _i in 0..5 {
+        l.create(());
+    }
+    l.concat(0, 1);
+    l.concat(0, 2);
+    l.concat(2, 3);
+    l.check_all();
+    use rand::{Rng, SeedableRng};
+    let mut rng: rand::rngs::StdRng = rand::rngs::StdRng::seed_from_u64(12);
+    for _ in 0..10 {
+        let u = rng.gen_range(0..=3);
+        let v = rng.gen_range(0..=3);
+        // repeated concats
+        l.concat(u, v);
+        l.check_all();
+    }
+
+    for _ in 0..50 {
+        let u = rng.gen_range(0..5);
+        l.splay(u);
+        l.check_all();
     }
 }
