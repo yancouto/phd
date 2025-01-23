@@ -1,9 +1,11 @@
+use std::fmt::{Debug, Formatter};
+
 use derivative::Derivative;
 
 use crate::lists::SearchData;
 
 use super::{
-    treap::{node2_fmt, node_fmt},
+    treap::{node2_fmt, node_fmt, PrettyIdx as I},
     AggregatedData, Idx, Lists,
 };
 
@@ -62,17 +64,67 @@ impl<Ag: AggregatedData> Node<Ag> {
     fn side_of(&self, p: Idx, flip: bool) -> Option<bool> {
         (p == self.child[0])
             .then_some(self.d_flip ^ flip)
-            .or_else(|| (p == self.child[1]).then_some(flip ^ !self.d_flip))
+            .or_else(|| (p == self.child[1]).then_some(!(flip ^ self.d_flip)))
+    }
+
+    fn agg(&self) -> Ag {
+        let mut ag = self.subtree_agg.clone();
+        if self.d_flip {
+            ag = ag.reverse()
+        }
+        ag
     }
 }
 
-#[derive(Debug)]
 pub struct Splays<Ag: AggregatedData> {
     n: Vec<Node<Ag>>,
     null: Node<Ag>,
 }
 
+impl<Ag: AggregatedData> Debug for Splays<Ag> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut seen = vec![false; self.n.len()];
+        for u in 0..self.n.len() {
+            if self.n[u].parent == Self::EMPTY {
+                self.print_rec(f, u, false, &mut seen)?;
+                write!(f, " --- ")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<Ag: AggregatedData> Splays<Ag> {
+    fn print_rec(
+        &self,
+        f: &mut Formatter<'_>,
+        u: Idx,
+        flipped: bool,
+        seen: &mut Vec<bool>,
+    ) -> std::fmt::Result {
+        if u == Self::EMPTY {
+            return Ok(());
+        }
+        if seen[u] {
+            write!(f, "<<ERR: Loop including vx {u}>>")?;
+            return Ok(());
+        }
+        seen[u] = true;
+        write!(f, "(")?;
+        let [l, r] = self.n[u].child(flipped);
+        let flipped = flipped ^ self.n[u].d_flip;
+        self.print_rec(f, l, flipped, seen)?;
+        write!(
+            f,
+            " {u}[{:?}]{} ",
+            self.n[u].data,
+            if self.n[u].d_flip { "<>" } else { "" }
+        )?;
+        self.print_rec(f, r, flipped, seen)?;
+        seen[u] = false;
+        write!(f, ")")
+    }
+
     fn n(&self, u: Idx) -> &Node<Ag> {
         (u == Self::EMPTY)
             .then_some(&self.null)
@@ -104,11 +156,7 @@ impl<Ag: AggregatedData> Splays<Ag> {
         let nu = self.n(u);
         let [l, r] = nu.child;
         let [nl, nr] = [self.n(l), self.n(r)];
-        let agg = nl
-            .subtree_agg
-            .clone()
-            .merge(Ag::from(&nu.data))
-            .merge(nr.subtree_agg.clone());
+        let agg = nl.agg().merge(Ag::from(&nu.data)).merge(nr.agg());
         let size = nl.subtree_size + 1 + nr.subtree_size;
         self.n[u].subtree_agg = agg;
         self.n[u].subtree_size = size;
@@ -121,9 +169,10 @@ impl<Ag: AggregatedData> Splays<Ag> {
     }
 
     fn replace_child(&mut self, u: Idx, right: bool, new_child: Idx) -> Idx {
+        log::trace!("replace_child u {u} right {right} new_child {new_child}");
         if new_child != Self::EMPTY {
             // To be safe, let's make sure the tree is ALWAYS valid
-            assert!(self.n[new_child].parent == Self::EMPTY);
+            assert_eq!(self.n[new_child].parent, Self::EMPTY);
             self.n[new_child].parent = u;
         }
         if u == Self::EMPTY {
@@ -131,7 +180,9 @@ impl<Ag: AggregatedData> Splays<Ag> {
         }
         let nu = &mut self.n[u];
         let prev_child = std::mem::replace(&mut nu.child[(right ^ nu.d_flip) as usize], new_child);
+        log::trace!("prev_child {prev_child}");
         if prev_child != Self::EMPTY {
+            assert_eq!(self.n[prev_child].parent, u);
             self.n[prev_child].parent = Self::EMPTY;
         }
         self.update(u);
@@ -144,14 +195,22 @@ impl<Ag: AggregatedData> Splays<Ag> {
         self.unlaze_flip(p);
         self.unlaze_flip(u);
         let u_side = self.side_in_parent(u);
-        let b = self.replace_child(u, !u_side, Self::EMPTY);
-        assert_eq!(self.replace_child(p, u_side, b), u);
+        let b = std::mem::replace(&mut self.n[u].child[!u_side as usize], p);
+        self.n[p].child[u_side as usize] = b;
         let pp = self.n[p].parent;
-        if pp != Self::EMPTY {
-            assert_eq!(self.replace_child(pp, self.side_in_parent(p), u), p);
+        self.n[u].parent = pp;
+        if b != Self::EMPTY {
+            self.n[b].parent = p;
         }
-        assert_eq!(self.replace_child(u, !u_side, p), Self::EMPTY);
-        self.update(pp);
+        if pp != Self::EMPTY {
+            let p_side = self.side_in_parent(p);
+            let pp_flipped = self.n[pp].d_flip;
+            self.n[pp].child[(p_side ^ pp_flipped) as usize] = u;
+        }
+        self.n[p].parent = u;
+        self.update(p); // Now lowest
+        self.update(u); // mid
+        self.update(pp); // top
     }
 
     /// Splay u to the root. u will be unlazed after this.
@@ -182,9 +241,53 @@ impl<Ag: AggregatedData> Splays<Ag> {
             }
         }
     }
+
+    fn check_rec(&self, u: Idx, seen: &mut Vec<bool>) -> (usize, Ag)
+    where
+        Ag: Eq,
+    {
+        if u == Self::EMPTY {
+            return (0, Ag::default());
+        }
+        assert!(!seen[u], "Loop including vx {u}");
+        seen[u] = true;
+        let [l, r] = self.n[u].child;
+        let (mut tot_sz, mut tot_agg) = self.check_rec(l, seen);
+        for x in [l, r] {
+            if x != Self::EMPTY {
+                assert_eq!(self.n[x].parent, u, "parent of {x} wrong (not {u})");
+            }
+        }
+        tot_sz += 1;
+        tot_agg = tot_agg.merge(Ag::from(&self.n[u].data));
+        let (sz, agg) = self.check_rec(r, seen);
+        tot_sz += sz;
+        tot_agg = tot_agg.merge(agg);
+        assert_eq!(tot_sz, self.n[u].subtree_size, "size calculated wrong");
+        assert_eq!(tot_agg, self.n[u].subtree_agg, "agg calculated wrong");
+        if self.n[u].d_flip {
+            tot_agg = tot_agg.reverse();
+        }
+        seen[u] = false;
+        (tot_sz, tot_agg)
+    }
 }
 
 impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
+    fn check_all(&self)
+    where
+        Ag: Eq,
+    {
+        log::trace!("Checking {self:?}");
+        let mut seen = vec![false; self.n.len()];
+        for u in 0..self.n.len() {
+            let p = self.n[u].parent;
+            if p != Self::EMPTY {
+                assert!(self.n[p].child.contains(&u));
+            }
+            self.check_rec(u, &mut seen);
+        }
+    }
     const EMPTY: Idx = Node::<Ag>::EMPTY;
 
     fn new(capacity: usize) -> Self {
@@ -240,6 +343,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data)) {
         self.splay(u);
         f(&mut self.n[u].data);
+        self.update(u);
     }
 
     fn order(&mut self, u: Idx) -> usize {
@@ -280,14 +384,17 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     }
 
     fn find_kth(&mut self, mut u: Idx, mut k: usize) -> Idx {
+        log::trace!("find {k}-th of {u}");
         self.splay(u);
         if self.n(u).subtree_size <= k {
             return Self::EMPTY;
         }
+        log::trace!("after splay {self:?}");
         loop {
             self.unlaze_flip(u);
             let [l, r] = self.n[u].child;
             let szl = self.n(l).subtree_size;
+            log::trace!("u {u} k {k} l-r {l}-{r} szl {szl}", l = I(l), r = I(r));
             if szl == k {
                 break;
             } else if szl > k {
@@ -297,6 +404,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
                 u = r;
             }
         }
+        log::trace!("Found k-th = {u}");
         self.splay(u);
         u
     }
@@ -312,9 +420,20 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     }
 
     fn range_agg_lr(&mut self, u: Idx, l: usize, r: usize) -> Ag {
-        let (l, m, r) = self.split_lr(u, l, r);
-        let ans = self.n(m).subtree_agg.clone();
-        self.concat_all([l, m, r]);
+        let (nl, nm, nr) = self.split_lr(u, l, r);
+        log::trace!(
+            "range_agg_lr({}, {}, {}) = {:?} (sz {}) (l={}, m={}, r={})",
+            u,
+            l,
+            r,
+            self.n(nm).subtree_agg,
+            self.n(nm).subtree_size,
+            nl,
+            nm,
+            nr
+        );
+        let ans = self.n(nm).subtree_agg.clone();
+        self.concat_all([nl, nm, nr]);
         ans
     }
 
@@ -326,11 +445,16 @@ impl<Ag: AggregatedData> Lists<Ag> for Splays<Ag> {
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
         let v = self.first(v);
         self.splay(u);
+        if v == Self::EMPTY {
+            return u;
+        }
         assert_eq!(self.replace_child(v, false, u), Self::EMPTY);
+        log::trace!("concated is {v}");
         v
     }
 
     fn split_lr(&mut self, u: Idx, l: usize, r: usize) -> (Idx, Idx, Idx) {
+        log::debug!("split_lr({}, {}, {})", u, l, r);
         let middle = self.find_kth(u, l);
         if middle == Self::EMPTY {
             return (u, Self::EMPTY, Self::EMPTY);

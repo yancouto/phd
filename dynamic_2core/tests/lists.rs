@@ -265,12 +265,11 @@ where
         sl.create(x);
     }
     for q in 1..=Q {
-        if q % 100 == 0 {
-            log::debug!("q {q}");
-        }
+        // Replace with failing test
         if q == 0 {
             log_traces();
         }
+        log::trace!("q {q}");
         let lists = sl.lists();
         let lists = &lists;
         let rnd_u = |mn_size: usize, rng: &mut StdRng| {
@@ -290,6 +289,7 @@ where
                 .try_into()
                 .unwrap();
             let (u, v) = (*l1.choose(rng).unwrap(), *l2.choose(rng).unwrap());
+            log::trace!("concat {u} {v}");
             l.concat(u, v);
             sl.concat(u, v);
         };
@@ -298,6 +298,7 @@ where
             let (a, b) = (rng.gen_range(0..l1.len()), rng.gen_range(0..l1.len()));
             let range = (a.min(b))..(a.max(b));
             let &u = l1.choose(rng).unwrap();
+            log::trace!("split {u} at {range:?}");
             l.split(u, range.clone());
             sl.split(u, range);
         };
@@ -311,6 +312,7 @@ where
             // reverse
             65..90 => {
                 let u = rnd_u(2, rng);
+                log::trace!("reverse {u}");
                 l.reverse(u);
                 sl.reverse(u);
             }
@@ -318,12 +320,14 @@ where
             _ => {
                 let u = rnd_u(1, rng);
                 let new_val = rng.gen_range(range.clone());
+                log::trace!("mutate {u} to {new_val}");
                 let f = |v: &mut i32| *v = new_val;
                 l.mutate_data(u, &f);
                 sl.mutate_data(u, &f);
             }
         }
         if q % 30 == 0 {
+            l.check_all();
             assert_eq!(l.total_size(), sl.total_size());
             let mut roots = BTreeSet::new();
             let lists = sl.lists();
@@ -357,6 +361,7 @@ where
                     let mut ab = [rng.gen_range(0..=list.len()), rng.gen_range(0..=list.len())];
                     ab.sort();
                     let &u = list.choose(rng).unwrap();
+                    log::trace!("range_agg {u} {ab:?}");
                     assert_eq!(l.range_agg(u, ab[0]..ab[1]), sl.range_agg(u, ab[0]..ab[1]));
                 }
             }
