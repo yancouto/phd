@@ -9,14 +9,14 @@ use rand::{rngs, Rng, SeedableRng};
 
 use super::{AggregatedData, Idx, Lists, SearchData, SearchDirection};
 
-fn node_fmt(u: &Idx, f: &mut Formatter) -> std::fmt::Result {
+pub(crate) fn node_fmt(u: &Idx, f: &mut Formatter) -> std::fmt::Result {
     if *u == usize::MAX {
         write!(f, "∅")
     } else {
         write!(f, "{u}")
     }
 }
-fn node2_fmt([u, v]: &[Idx; 2], f: &mut Formatter) -> std::fmt::Result {
+pub(crate) fn node2_fmt([u, v]: &[Idx; 2], f: &mut Formatter) -> std::fmt::Result {
     write!(f, "[")?;
     node_fmt(u, f)?;
     write!(f, ", ")?;
@@ -255,8 +255,8 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         if u == Self::EMPTY {
             log::trace!("Node ∅");
         } else {
-            let mut t = TreeBuilder::new();
-            self.tree_preorder_dbg(u, &mut t);
+            let t = TreeBuilder::new();
+            self.tree_preorder_dbg(u, &t);
             log::trace!("\n{}", t.string());
         }
     }
@@ -268,7 +268,7 @@ impl<Ag: AggregatedData> Treaps<Ag> {
         } else if v == Self::EMPTY {
             return u;
         }
-        let r = if self.nodes[u].priority > self.nodes[v].priority {
+        if self.nodes[u].priority > self.nodes[v].priority {
             let old_r = self.change_right(u, Self::EMPTY, false);
             let new_r = self.concat_inner(old_r, v);
             self.change_right(u, new_r, false);
@@ -278,8 +278,7 @@ impl<Ag: AggregatedData> Treaps<Ag> {
             let new_l = self.concat_inner(u, old_l);
             self.change_left(v, new_l, false);
             v
-        };
-        r
+        }
     }
     fn range_agg_lr_inner(&self, u: Idx, ql: usize, qr: usize) -> Ag {
         if u == Self::EMPTY || ql >= qr {
@@ -326,7 +325,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         self.nodes.len()
     }
 
-    fn root(&self, mut u: Idx) -> Idx {
+    fn root(&mut self, mut u: Idx) -> Idx {
         while self.parent(u) != Self::EMPTY {
             u = self.nodes[u].parent;
         }
@@ -345,7 +344,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         }
     }
 
-    fn order(&self, u: Idx) -> usize {
+    fn order(&mut self, u: Idx) -> usize {
         if u == Self::EMPTY {
             return 0;
         }
@@ -371,7 +370,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
     }
 
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
@@ -396,7 +395,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         Self::EMPTY
     }
 
-    fn find_kth(&self, mut u: Idx, mut k: usize) -> Idx {
+    fn find_kth(&mut self, mut u: Idx, mut k: usize) -> Idx {
         let mut flipped = false;
         u = self.root(u);
         while u != Self::EMPTY {
@@ -415,21 +414,23 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         Self::EMPTY
     }
 
-    fn len(&self, u: Idx) -> usize {
+    fn len(&mut self, u: Idx) -> usize {
         if u == Self::EMPTY {
             0
         } else {
-            self.nodes[self.root(u)].size
+            let u = self.root(u);
+            self.nodes[u].size
         }
     }
 
-    fn total_agg(&self, u: Idx) -> Ag {
+    fn total_agg(&mut self, u: Idx) -> Ag {
         let u = self.root(u);
         self.ag_data(u, false)
     }
 
-    fn range_agg_lr(&self, u: Idx, ql: usize, qr: usize) -> Ag {
-        self.range_agg_lr_inner(self.root(u), ql, qr)
+    fn range_agg_lr(&mut self, u: Idx, ql: usize, qr: usize) -> Ag {
+        let u = self.root(u);
+        self.range_agg_lr_inner(u, ql, qr)
     }
 
     fn concat(&mut self, u: Idx, v: Idx) -> Idx {
@@ -453,7 +454,7 @@ impl<Ag: AggregatedData> Lists<Ag> for Treaps<Ag> {
         self.nodes[u].flip_subtree ^= true;
     }
 
-    fn is_root(&self, u: Idx) -> bool {
+    fn is_root(&mut self, u: Idx) -> bool {
         self.parent(u) == Self::EMPTY
     }
 }

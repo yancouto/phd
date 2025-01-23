@@ -36,7 +36,7 @@ impl<T> D2CTests<T>
 where
     T: Dynamic2CoreSolver,
 {
-    fn assert_all_connections(t: &T, groups: &[&[usize]]) {
+    fn assert_all_connections(t: &mut T, groups: &[&[usize]]) {
         for g1 in groups {
             for u in g1.iter().copied() {
                 for g2 in groups {
@@ -71,17 +71,17 @@ where
     }
 
     fn test_dyn_con() {
-        let mut t = T::new(5);
-        Self::assert_all_connections(&t, &[&[0], &[1], &[2], &[3], &[4]]);
+        let t = &mut T::new(5);
+        Self::assert_all_connections(t, &[&[0], &[1], &[2], &[3], &[4]]);
         assert!(t.add_edge(0, 1));
         assert!(t.add_edge(0, 2));
         assert!(!t.add_edge(0, 1));
         assert!(!t.remove_edge(1, 2));
-        Self::assert_all_connections(&t, &[&[0, 1, 2], &[3], &[4]]);
+        Self::assert_all_connections(t, &[&[0, 1, 2], &[3], &[4]]);
         assert!(t.add_edge(1, 4));
-        Self::assert_all_connections(&t, &[&[0, 1, 2, 4], &[3]]);
+        Self::assert_all_connections(t, &[&[0, 1, 2, 4], &[3]]);
         assert!(t.remove_edge(1, 0));
-        Self::assert_all_connections(&t, &[&[0, 2], &[1, 4], &[3]]);
+        Self::assert_all_connections(t, &[&[0, 2], &[1, 4], &[3]]);
     }
 
     fn test_2core() {
@@ -216,7 +216,7 @@ impl Dynamic2CoreSolver for Slow {
         self.adj[u].remove(&v) && self.adj[v].remove(&u)
     }
 
-    fn is_connected(&self, u: usize, v: usize) -> bool {
+    fn is_connected(&mut self, u: usize, v: usize) -> bool {
         let mut seen = BTreeSet::new();
         let mut stack = vec![u];
         while let Some(u) = stack.pop() {
@@ -254,7 +254,7 @@ impl Dynamic2CoreSolver for Slow {
         self.saved_core[u]
     }
 
-    fn is_in_1core(&self, u: usize) -> bool {
+    fn is_in_1core(&mut self, u: usize) -> bool {
         !self.adj[u].is_empty()
     }
 }

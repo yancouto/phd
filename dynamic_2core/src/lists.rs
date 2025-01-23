@@ -23,9 +23,11 @@ where
     where
         Self: Sized,
     {
+        println!("from_iter");
         let data = data.into_iter();
         let mut lists = Self::new(data.size_hint().0);
         for (i, data) in data.enumerate() {
+            println!("data {i} {data:?}");
             lists.create(data);
             if i > 0 {
                 lists.concat(i - 1, i);
@@ -42,25 +44,26 @@ where
     // They panic if the node doesn't exist.
 
     /// Returns the root of the list containing u. All nodes in the list have the same root.
-    fn root(&self, u: Idx) -> Idx;
+    fn root(&mut self, u: Idx) -> Idx;
     /// Data associated with u. Panics if u doesn't exist.
     fn data(&self, u: Idx) -> &Ag::Data;
     /// Data associated with u.
     fn mutate_data(&mut self, u: Idx, f: impl FnOnce(&mut Ag::Data));
     /// Position of u in its list, 0-indexed.
-    fn order(&self, u: Idx) -> usize;
-    fn is_first(&self, u: Idx) -> bool {
+    fn order(&mut self, u: Idx) -> usize;
+    fn is_first(&mut self, u: Idx) -> bool {
         u == self.first(u)
     }
-    fn is_last(&self, u: Idx) -> bool {
+    fn is_last(&mut self, u: Idx) -> bool {
         self.order(u) == self.len(u) - 1
     }
     /// Node after u in its list.
-    fn next(&self, u: Idx) -> Idx {
-        self.find_kth(u, self.order(u) + 1)
+    fn next(&mut self, u: Idx) -> Idx {
+        let order = self.order(u);
+        self.find_kth(u, order + 1)
     }
     /// Node before u in its list.
-    fn prev(&self, u: Idx) -> Idx {
+    fn prev(&mut self, u: Idx) -> Idx {
         let k = self.order(u);
         if k == 0 {
             Self::EMPTY
@@ -69,38 +72,38 @@ where
         }
     }
     /// Are the two nodes on the same tree?
-    fn on_same_list(&self, u: Idx, v: Idx) -> bool {
+    fn on_same_list(&mut self, u: Idx, v: Idx) -> bool {
         self.root(u) == self.root(v)
     }
     /// Checks if the current node is the root of the tree.
-    fn is_root(&self, u: Idx) -> bool {
+    fn is_root(&mut self, u: Idx) -> bool {
         self.root(u) == u
     }
     /// Find an element in the list containing u using a search strategy.
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx;
     /// K-th element in the list containing u. (0-indexed)
-    fn find_kth(&self, u: Idx, k: usize) -> Idx;
+    fn find_kth(&mut self, u: Idx, k: usize) -> Idx;
     /// First element in the list containing u.
-    fn first(&self, u: Idx) -> Idx {
+    fn first(&mut self, u: Idx) -> Idx {
         self.find_kth(u, 0)
     }
     /// Size of the list containing u.
-    fn len(&self, u: Idx) -> usize;
+    fn len(&mut self, u: Idx) -> usize;
     /// Aggregated data of the list containing u.
-    fn total_agg(&self, u: Idx) -> Ag {
+    fn total_agg(&mut self, u: Idx) -> Ag {
         self.range_agg(u, ..)
     }
     /// Aggregated data of a range of the list containing u. (0-indexed)
-    fn range_agg(&self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
+    fn range_agg(&mut self, u: Idx, range: impl RangeBounds<usize>) -> Ag {
         let [l, r] = range_to_lr(range, || self.len(u));
         self.range_agg_lr(u, l, r)
     }
     /// XXX: Use range_agg(u, l..r) instead.
-    fn range_agg_lr(&self, u: Idx, l: usize, r: usize) -> Ag;
+    fn range_agg_lr(&mut self, u: Idx, l: usize, r: usize) -> Ag;
 
     /// Concats the lists containing u and v. Returns the new root.
     fn concat(&mut self, u: Idx, v: Idx) -> Idx;
@@ -117,6 +120,7 @@ where
         let [l, r] = range_to_lr(range, || self.len(u));
         self.split_lr(u, l, r)
     }
+    /// Returns range from l (inclusive) to r (exclusive)
     /// XXX: Use range_agg(u, l..r) instead.
     fn split_lr(&mut self, u: Idx, l: usize, r: usize) -> (Idx, Idx, Idx);
     /// Reverse the whole list containing u.
@@ -169,13 +173,7 @@ fn range_to_lr(range: impl RangeBounds<usize>, len: impl FnOnce() -> usize) -> [
 
 impl AggregatedData for () {
     type Data = ();
-    fn from(_: &Self::Data) -> Self {
-        ()
-    }
-    fn merge(self, _: Self) -> Self {
-        ()
-    }
-    fn reverse(self) -> Self {
-        ()
-    }
+    fn from(_: &Self::Data) -> Self {}
+    fn merge(self, _: Self) -> Self {}
+    fn reverse(self) -> Self {}
 }

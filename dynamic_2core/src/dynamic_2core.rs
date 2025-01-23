@@ -17,11 +17,11 @@ pub trait Dynamic2CoreSolver {
     /// Remove an edge between u and v. Returns whether it was removed.
     fn remove_edge(&mut self, u: usize, v: usize) -> bool;
     /// Check if u and v are connected.
-    fn is_connected(&self, u: usize, v: usize) -> bool;
+    fn is_connected(&mut self, u: usize, v: usize) -> bool;
     /// Check if u is in the 2-core, that is, if it is contained in a subgraph with minimum degree 2.
     fn is_in_2core(&mut self, u: usize) -> bool;
     /// Check if u is in the 1-core, that is, if it is contained in a subgraph with minimum degree 1.
-    fn is_in_1core(&self, u: usize) -> bool;
+    fn is_in_1core(&mut self, u: usize) -> bool;
 }
 
 type Level = usize;
@@ -160,7 +160,7 @@ where
     LC: LinkCutTree,
 {
     /// Number of nodes of the graph, never changes.
-    n: usize,
+    _n: usize,
     /// ETT for each level in the HDT algorithm.
     ett: Vec<ETT>,
     edge_info: Vec<EdgeInfo>,
@@ -197,14 +197,14 @@ where
 {
     fn dbg(&self, f: &mut std::fmt::Formatter<'_>, i: Level, mode: DbgMode) -> std::fmt::Result {
         write!(f, "ETTSolver Level {}:", i)?;
-        let l = &self.ett[i];
-        for u in 0..self.n {
-            if l.root(u) == u {
-                write!(f, " [root {u} size {sz}]", sz = l.tree_size(u))?;
-            }
-        }
+        //let l = &self.ett[i];
+        //for u in 0..self.n {
+        //    if l.root(u) == u {
+        //        write!(f, " [root {u}]")?;
+        //    }
+        //}
         if mode != NoEdges {
-            write!(f, ", edges:\n")?;
+            writeln!(f, ", edges:")?;
             let mut es = self
                 .e_to_id
                 .iter()
@@ -219,9 +219,9 @@ where
                 .collect::<Vec<_>>();
             es.sort_by_key(|(_, _, l, is_t)| (*l, !is_t));
             for (u, v, l, is_tree) in es {
-                write!(
+                writeln!(
                     f,
-                    "{} {} {}{}\n",
+                    "{} {} {}{}",
                     u,
                     v,
                     if is_tree && mode == AllEdges { "T" } else { "" },
@@ -392,7 +392,7 @@ where
             })
             .collect::<Vec<_>>();
         Self {
-            n,
+            _n: n,
             ett,
             edge_info: Vec::new(),
             e_to_id: BTreeMap::new(),
@@ -443,10 +443,10 @@ where
                 .into_iter()
                 .enumerate()
                 .map(|(lvl, e)| {
-                    let ett = &self.ett[lvl];
+                    let ett = &mut self.ett[lvl];
                     assert!(ett.is_connected(u, v));
                     let (tu, tv) = self.ett[lvl].disconnect(e);
-                    let ett = &self.ett[lvl];
+                    let ett = &mut self.ett[lvl];
                     assert!(!ett.is_connected(tu, tv));
                     assert!(!ett.is_connected(u, v));
                     if ett.tree_size(tu) < ett.tree_size(tv) {
@@ -498,7 +498,7 @@ where
         true
     }
 
-    fn is_connected(&self, u: usize, v: usize) -> bool {
+    fn is_connected(&mut self, u: usize, v: usize) -> bool {
         self.ett[0].is_connected(u, v)
     }
 
@@ -506,7 +506,7 @@ where
         self.ett[0].reroot(u);
         self.lc_0.reroot(u);
         self.first_and_last_nodes_with_extra_edges(u)
-            .map_or(false, |(first, last)| {
+            .is_some_and(|(first, last)| {
                 if first == u {
                     return true;
                 }
@@ -516,7 +516,7 @@ where
             })
     }
 
-    fn is_in_1core(&self, u: usize) -> bool {
+    fn is_in_1core(&mut self, u: usize) -> bool {
         // Definitely can be more efficient, O(1), but this works
         self.ett[0].tree_size(u) > 1
     }

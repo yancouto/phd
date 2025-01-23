@@ -81,7 +81,7 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         self.u_to_list.len()
     }
 
-    fn root(&self, u: Idx) -> Idx {
+    fn root(&mut self, u: Idx) -> Idx {
         if u == Self::EMPTY {
             return Self::EMPTY;
         }
@@ -100,7 +100,7 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
             .data)
     }
 
-    fn order(&self, u: Idx) -> usize {
+    fn order(&mut self, u: Idx) -> usize {
         if u == Self::EMPTY {
             return 0;
         }
@@ -108,7 +108,7 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
     }
 
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         mut search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
@@ -131,18 +131,18 @@ impl<Ag: AggregatedData> Lists<Ag> for SlowLists<Ag> {
         Self::EMPTY
     }
 
-    fn find_kth(&self, u: Idx, k: usize) -> Idx {
+    fn find_kth(&mut self, u: Idx, k: usize) -> Idx {
         self.list(u).get(k).map_or(Self::EMPTY, |e| e.idx)
     }
 
-    fn len(&self, u: Idx) -> usize {
+    fn len(&mut self, u: Idx) -> usize {
         if u == Self::EMPTY {
             return 0;
         }
         self.list(u).len()
     }
 
-    fn range_agg_lr(&self, u: Idx, l: usize, r: usize) -> Ag {
+    fn range_agg_lr(&mut self, u: Idx, l: usize, r: usize) -> Ag {
         self.list(u)
             .iter()
             .enumerate()

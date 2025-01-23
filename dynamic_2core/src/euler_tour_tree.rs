@@ -17,17 +17,17 @@ pub trait EulerTourTree<Ag: AggregatedData> {
     /// Makes the given node the root of its tree.
     fn reroot(&mut self, u: Idx);
     /// Returns the root of the euler tour tree containing u.
-    fn root(&self, u: Idx) -> Idx;
+    fn root(&mut self, u: Idx) -> Idx;
     /// Remove the edge and return the root of the current tree and then the root of the new tree the edge removal created.
     fn disconnect(&mut self, edge: EdgeRef) -> (Idx, Idx);
     /// Connects the two nodes with an edge. The root of the first tree remais the root. Returns None if they are already connected.
     fn connect(&mut self, u: Idx, w: Idx, uw_data: Ag::Data, wu_data: Ag::Data) -> Option<EdgeRef>;
-    fn is_connected(&self, u: Idx, v: Idx) -> bool;
+    fn is_connected(&mut self, u: Idx, v: Idx) -> bool;
     /// Number of nodes in the whole tree this node is contained in.
-    fn tree_size(&self, u: Idx) -> usize;
+    fn tree_size(&mut self, u: Idx) -> usize;
     /// Finds an element in the tree containing this node and return it. It may be a node or an edge.
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx;
@@ -57,16 +57,16 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Nodes: ")?;
-        for u in 0..self.l.total_size() {
-            if self.l.root(u) == u {
-                write!(f, "<")?;
-                for i in 0..self.l.len(u) {
-                    let j = self.l.find_kth(u, i);
-                    write!(f, "{j}{d:?} ", d = self.l.data(j))?;
-                }
-                write!(f, "> ")?;
-            }
-        }
+        //for u in 0..self.l.total_size() {
+        //    if self.l.is_root(u) {
+        //        write!(f, "<")?;
+        //        for i in 0..self.l.len(u) {
+        //            let j = self.l.find_kth(u, i);
+        //            write!(f, "{j}{d:?} ", d = self.l.data(j))?;
+        //        }
+        //        write!(f, "> ")?;
+        //    }
+        //}
 
         Ok(())
     }
@@ -99,12 +99,13 @@ where
 
         // "AAA u BBB" and "w CCC" (it is root) becomes
         // AAA u uw w CCC wu BBB
-        let (_, until_u, after_u) = self.l.split(u, 0..=self.l.order(u));
+        let order = self.l.order(u);
+        let (_, until_u, after_u) = self.l.split(u, 0..=order);
         self.l.concat_all([until_u, uw, root_w, wu, after_u]);
         EdgeRef(uw)
     }
-    pub fn inner_lists(&self) -> &L {
-        &self.l
+    pub fn inner_lists(&mut self) -> &mut L {
+        &mut self.l
     }
 }
 
@@ -126,11 +127,12 @@ where
     }
     fn reroot(&mut self, u: Idx) {
         if !self.l.is_first(u) {
-            let (before_u, u_and_after, _) = self.l.split(u, self.l.order(u)..);
+            let order = self.l.order(u);
+            let (before_u, u_and_after, _) = self.l.split(u, order..);
             self.l.concat(u_and_after, before_u);
         }
     }
-    fn root(&self, u: Idx) -> Idx {
+    fn root(&mut self, u: Idx) -> Idx {
         self.l.first(u)
     }
     fn disconnect(&mut self, edge: EdgeRef) -> (Idx, Idx) {
@@ -139,13 +141,14 @@ where
         let (a, b) = (self.l.order(edge), self.l.order(other_e));
         let (left, middle, right) = self.l.split(edge, a.min(b)..=a.max(b));
         // Remove the first and last items, which is the edge which no longer exists
-        let (_, middle, _) = self.l.split(middle, 1..self.l.len(middle) - 1);
+        let m_len = self.l.len(middle);
+        let (_, middle, _) = self.l.split(middle, 1..m_len - 1);
         debug_assert_eq!(self.l.len(edge), 1);
         debug_assert_eq!(self.l.len(other_e), 1);
         let rest = self.l.concat(left, right);
         (self.l.first(rest), self.l.first(middle))
     }
-    fn is_connected(&self, u: Idx, v: Idx) -> bool {
+    fn is_connected(&mut self, u: Idx, v: Idx) -> bool {
         self.l.on_same_list(u, v)
     }
     fn connect(&mut self, u: Idx, w: Idx, uw_data: Ag::Data, wu_data: Ag::Data) -> Option<EdgeRef> {
@@ -159,7 +162,7 @@ where
     }
 
     fn find_element(
-        &self,
+        &mut self,
         u: Idx,
         search_strategy: impl FnMut(SearchData<'_, Ag>) -> SearchDirection,
     ) -> Idx {
@@ -180,7 +183,7 @@ where
     fn mutate_edata(&mut self, e: EdgeRef, direction: bool, f: impl FnOnce(&mut Ag::Data)) {
         self.l.mutate_data(e.0 + (direction as usize), f)
     }
-    fn tree_size(&self, u: Idx) -> usize {
+    fn tree_size(&mut self, u: Idx) -> usize {
         (self.l.len(u) + 2) / 3
     }
 }

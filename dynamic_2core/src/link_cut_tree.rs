@@ -42,7 +42,8 @@ where
         let mut prev_topmost = L::EMPTY;
         let mut last_u = u;
         while u != L::EMPTY {
-            let (_, _, after) = self.l.split(u, ..=self.l.order(u));
+            let order = self.l.order(u);
+            let (_, _, after) = self.l.split(u, ..=order);
             assert!(self.l.is_last(u));
             if after != L::EMPTY {
                 self.parent[self.l.first(after)] = u;
@@ -92,7 +93,8 @@ where
         }
         let p = self.l.prev(u);
         // split ..p from u
-        self.l.split(u, ..self.l.order(u));
+        let order = self.l.order(u);
+        self.l.split(u, ..order);
         Some(p)
     }
 
