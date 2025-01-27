@@ -42,6 +42,7 @@
 //! ```
 //!
 //! Add `-- --ignored` to run the stress tests (which run indefinitely with random data until they fail). And use `cargo bench` to see the benchmarks.
+#![feature(get_many_mut)]
 pub mod dynamic_2core;
 pub mod euler_tour_tree;
 pub mod link_cut_tree;

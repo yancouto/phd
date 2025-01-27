@@ -218,6 +218,51 @@ impl<Ag: AggregatedData> Splays<Ag> {
         self.update(pp); // top
     }
 
+    fn replace_in_parent(&mut self, u: Idx, v: Idx) {
+        let p = self.n[u].parent;
+        if p != Self::EMPTY {
+            for c in &mut self.n[p].child {
+                if *c == u {
+                    *c = v;
+                }
+            }
+        }
+    }
+
+    // Directly doing the two rotations is faster than doing them one at a time, though it works exactly the same.
+    fn zig_zig(&mut self, u: Idx, p: Idx, pp: Idx, u_side: usize) {
+        // Same as:
+        // self.rotate_up(p);
+        // self.rotate_up(u);
+        self.replace_in_parent(pp, u);
+        let [nu, np, npp] = self.n.get_many_mut([u, p, pp]).unwrap();
+        let (b, c) = (nu.child[1 - u_side], np.child[1 - u_side]);
+        (np.child[u_side], npp.child[u_side]) = (b, c);
+        (nu.child[1 - u_side], np.child[1 - u_side]) = (p, pp);
+        (nu.parent, np.parent, npp.parent) = (npp.parent, u, p);
+        for (v, vp) in [(b, p), (c, pp)] {
+            if v != Self::EMPTY {
+                self.n[v].parent = vp;
+            }
+        }
+    }
+    fn zig_zag(&mut self, u: Idx, p: Idx, pp: Idx, u_side: usize) {
+        // Same as:
+        // self.rotate_up(u);
+        // self.rotate_up(u);
+        self.replace_in_parent(pp, u);
+        let [nu, np, npp] = self.n.get_many_mut([u, p, pp]).unwrap();
+        let (b, c) = (nu.child[u_side], nu.child[1 - u_side]);
+        (nu.child[u_side], nu.child[1 - u_side]) = (pp, p);
+        (np.child[u_side], npp.child[1 - u_side]) = (c, b);
+        (nu.parent, np.parent, npp.parent) = (npp.parent, u, u);
+        for (v, vp) in [(b, pp), (c, p)] {
+            if v != Self::EMPTY {
+                self.n[v].parent = vp;
+            }
+        }
+    }
+
     /// Splay u to the root. u will be unlazed after this.
     fn splay(&mut self, u: Idx) {
         if u == Self::EMPTY {
@@ -238,12 +283,13 @@ impl<Ag: AggregatedData> Splays<Ag> {
             let u_side = self.side_in_parent(u);
             let p_side = self.side_in_parent(p);
             if u_side == p_side {
-                self.rotate_up(p);
-                self.rotate_up(u);
+                self.zig_zig(u, p, pp, u_side as usize);
             } else {
-                self.rotate_up(u);
-                self.rotate_up(u);
+                self.zig_zag(u, p, pp, u_side as usize);
             }
+            self.update(pp);
+            self.update(p);
+            self.update(u);
         }
     }
 
